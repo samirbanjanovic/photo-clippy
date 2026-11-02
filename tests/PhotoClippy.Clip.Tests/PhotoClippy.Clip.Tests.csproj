@@ -13,8 +13,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../PhotoClippy.Testing/PhotoClippy.Testing.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Core/PhotoClippy.Core.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Plugins.Clip/PhotoClippy.Plugins.Clip.csproj" />
   </ItemGroup>
 
   <ItemGroup>

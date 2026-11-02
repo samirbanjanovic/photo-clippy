@@ -4,6 +4,7 @@
 **/.vscode/
 **/TestResults/
 **/*.user
+.git/
 tests/
 tools/
 deploy/

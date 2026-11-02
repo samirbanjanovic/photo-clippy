@@ -12,9 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../PhotoClippy.Testing/PhotoClippy.Testing.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Imaging/PhotoClippy.Imaging.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Plugins.Auth/PhotoClippy.Plugins.Auth.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -3,9 +3,13 @@
 #   /lenses    rank lenses   /settings library folders, analysis, components, schedule, models
 #   /api/v1/*  JSON API      /healthz  health probe
 #
-#   cd src/deploy
+#   cd deploy
 #   docker compose build
 #   docker compose up -d        # then open http://<host>:8095 (or the Traefik host below)
+#
+# To run the image published by deploy/publish-image.sh instead of building it on this host:
+#   PHOTO_CLIPPY_IMAGE_REF=docker.home.arpa/photo-clippy:latest docker compose pull
+#   PHOTO_CLIPPY_IMAGE_REF=docker.home.arpa/photo-clippy:latest docker compose up -d --no-build
 #
 # Configure everything from Settings; it is saved to /data/photo-clippy.json and applied without a restart.
 # Any PHOTO_CLIPPY_* variable set below overrides the file and shows as locked (greyed out) in the UI, so only
@@ -23,7 +27,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: photo-clippy:latest
+    image: ${PHOTO_CLIPPY_IMAGE_REF:-photo-clippy:latest}
     container_name: photo-clippy
     restart: unless-stopped
     user: "${PUID:-1000}:${PGID:-1000}"

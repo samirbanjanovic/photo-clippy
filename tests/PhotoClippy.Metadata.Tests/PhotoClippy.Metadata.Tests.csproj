@@ -13,11 +13,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../PhotoClippy.Testing/PhotoClippy.Testing.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Plugins.Reporting/PhotoClippy.Plugins.Reporting.csproj" />
-    <!-- Core and the MCDA recommender build realistic report models; the renderers themselves depend on Contracts only. -->
-    <ProjectReference Include="../../PhotoClippy.Core/PhotoClippy.Core.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Plugins.Recommendation/PhotoClippy.Plugins.Recommendation.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Plugins.Metadata/PhotoClippy.Plugins.Metadata.csproj" />
   </ItemGroup>
 
   <ItemGroup>

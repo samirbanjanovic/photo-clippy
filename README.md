@@ -28,7 +28,8 @@ rank candidate lenses and change every setting without editing files.
   disabled.
 
 ```
-src/
+PhotoClippy.slnx, global.json, Directory.*.props   solution and shared build settings
+src/                                   product source only
   PhotoClippy.Contracts/               interfaces + records (the plugin API)
   PhotoClippy.Core/                    discovery, pipeline, cache, profiling, insights, config, plugin host
   PhotoClippy.Imaging/                 decode (JPEG/HEIF/TIFF/PNG + embedded RAW previews) via SkiaSharp
@@ -40,11 +41,11 @@ src/
   PhotoClippy.Plugins.Reporting/       HTML, JSON and CSV renderers
   PhotoClippy.Plugins.External/        bridge for out-of-process plugins
   PhotoClippy.Cli/                     `photo-clippy` CLI, `serve` daemon and its Blazor web UI (Web/, wwwroot/)
-  data/taxonomy/genres.json            subject taxonomy (20 genres, focal/aperture preferences)
-  deploy/                              Dockerfile + docker-compose.yaml
-  examples/                            external plugin examples + wire protocol
-  tests/                               xUnit test projects
-  tools/PhotoClippy.SampleGen/         synthetic EXIF library generator
+data/taxonomy/genres.json              subject taxonomy (20 genres, focal/aperture preferences)
+deploy/                                Dockerfile, docker-compose.yaml, publish-image.sh
+examples/                              external plugin examples + wire protocol
+tests/                                 xUnit test projects
+tools/PhotoClippy.SampleGen/           synthetic EXIF library generator
 ```
 
 ## Quick start
@@ -52,8 +53,7 @@ src/
 Requires the .NET 10 SDK on Linux, macOS or Windows.
 
 ```sh
-cd src
-dotnet publish PhotoClippy.Cli -c Release -o ~/.local/photo-clippy
+dotnet publish src/PhotoClippy.Cli -c Release -o ~/.local/photo-clippy
 alias photo-clippy=~/.local/photo-clippy/photo-clippy
 
 photo-clippy doctor                 # check decoder, models, exiftool, plugins
@@ -233,8 +233,8 @@ There are three ways to provide one:
    `IRequiresModels`, so `models fetch` can download them.
 3. **Out-of-process, any language.** JSON-RPC 2.0 over stdio or HTTP, registered under
    `plugins.external`. Frames go over the wire as PPM; analyzer `extras` show up as extra
-   distributions in the report. See [examples/README.md](src/examples/README.md) and
-   [examples/PROTOCOL.md](src/examples/PROTOCOL.md). These run in Python with no dependencies:
+   distributions in the report. See [examples/README.md](examples/README.md) and
+   [examples/PROTOCOL.md](examples/PROTOCOL.md). These run in Python with no dependencies:
    - a composition analyzer
    - a Markdown report renderer
 
@@ -364,10 +364,10 @@ List several providers to migrate gradually, for example
 
 ### Docker
 
-[deploy/Dockerfile](src/deploy/Dockerfile) is multi-stage and multi-arch (amd64 and arm64). It runs
+[deploy/Dockerfile](deploy/Dockerfile) is multi-stage and multi-arch (amd64 and arm64). It runs
 as non-root on `aspnet:10.0` and includes ExifTool. It sets `PHOTO_CLIPPY_HOME=/data` and
 `PHOTO_CLIPPY_SERVE__BROWSEROOTS__0=/photos`, so the folder picker is confined to the mounted
-libraries. [deploy/docker-compose.yaml](src/deploy/docker-compose.yaml) does the following:
+libraries. [deploy/docker-compose.yaml](deploy/docker-compose.yaml) does the following:
 
 - mounts the photo libraries read-only under `/photos`
 - keeps state and the UI-edited `photo-clippy.json` in `/data`
@@ -379,7 +379,7 @@ with write permission for the configured `PUID`/`PGID`, and ensure the external 
 exists. Photo directories remain read-only.
 
 ```sh
-cd src/deploy
+cd deploy
 docker compose build
 docker compose up -d          # open http://<host>:8095 and sign in with the setup code (see Sign-in)
 ```
@@ -390,14 +390,58 @@ variable in the compose file locks the corresponding setting in the UI. Set `PUI
 owner of the data folder (default `1000`), and `PHOTO_CLIPPY_DATA` to override the host data
 path. Adjust the Traefik `Host()` rule for your domain.
 
+#### Publishing to the lab registry
+
+[deploy/publish-image.sh](deploy/publish-image.sh) builds the image from the repository root and
+pushes it to the homelab registry (`docker.home.arpa`, served by Traefik on 443 with no port in the
+image name). It runs from any directory on Linux or macOS.
+
+```sh
+deploy/publish-image.sh                 # build linux/amd64, smoke test (--version), push 3 tags
+deploy/publish-image.sh --dry-run       # print the commands only
+deploy/publish-image.sh --no-push       # build and smoke test locally
+deploy/publish-image.sh -p linux/arm64  # an ARM lab host
+deploy/publish-image.sh -p linux/amd64,linux/arm64   # multi-arch, pushed straight from buildx
+```
+
+| Tag | Meaning |
+| :--- | :--- |
+| `0.1.0` | `<Version>` from `Directory.Build.props` |
+| `sha-<rev>` | git revision, suffixed `-dirty` when the working tree has uncommitted changes |
+| `latest` | moving tag, omit with `--no-latest`; add your own with `-t <tag>` |
+
+The default platform is `linux/amd64` regardless of the build machine, so an Apple Silicon Mac
+still produces an image an x86-64 lab host can run. Override with `-p`, or set
+`PHOTO_CLIPPY_REGISTRY`, `PHOTO_CLIPPY_IMAGE` and `PHOTO_CLIPPY_PLATFORM`. If the registry requires
+a login, export `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` (read via `--password-stdin`).
+
+Before building, the script checks that `https://docker.home.arpa/v2/` answers like a registry and
+stops with a reason if it does not. `--skip-preflight` turns that off.
+
+The lab registry sits behind Traefik's default self-signed certificate, so Docker refuses it
+(`x509: certificate signed by unknown authority`) until you tell it to trust the host, once, on
+the machine that pushes and on every host that pulls:
+
+- put the CA or certificate in `~/.docker/certs.d/docker.home.arpa/ca.crt` (on Linux
+  `/etc/docker/certs.d/docker.home.arpa/ca.crt`), or
+- add `"docker.home.arpa"` to `insecure-registries` in the Docker daemon settings (Docker Desktop:
+  Settings → Docker Engine) and restart Docker.
+
+To test the published image in the lab, point the compose file at it on the lab host:
+
+```sh
+cd deploy
+PHOTO_CLIPPY_IMAGE_REF=docker.home.arpa/photo-clippy:latest docker compose pull
+PHOTO_CLIPPY_IMAGE_REF=docker.home.arpa/photo-clippy:latest docker compose up -d --no-build
+```
+
 ## Development
 
 ```sh
-cd src
 dotnet build PhotoClippy.slnx
 dotnet test PhotoClippy.slnx --no-build --maxcpucount:1 -- xUnit.ParallelizeTestCollections=false
 dotnet run --project tools/PhotoClippy.SampleGen -- /tmp/samplelib --count 600 --seed 42
-dotnet run --project PhotoClippy.Cli -- run /tmp/samplelib -c "24/1.4, 35/1.2"
+dotnet run --project src/PhotoClippy.Cli -- run /tmp/samplelib -c "24/1.4, 35/1.2"
 ```
 
 - **Tests:** the full suite includes timing-sensitive benchmarks. The command above runs projects

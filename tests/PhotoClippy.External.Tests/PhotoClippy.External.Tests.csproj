@@ -13,12 +13,16 @@
 
   <ItemGroup>
     <ProjectReference Include="../PhotoClippy.Testing/PhotoClippy.Testing.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
-    <ProjectReference Include="../../PhotoClippy.Plugins.Color/PhotoClippy.Plugins.Color.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Plugins.External/PhotoClippy.Plugins.External.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Scripts/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
