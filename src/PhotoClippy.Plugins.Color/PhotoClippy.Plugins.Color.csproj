@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Per-pixel SIMD hot loops: Debug codegen does not inline the Vector128 helpers (~15x slower). -->
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PhotoClippy.Color.Tests" />
+  </ItemGroup>
+
+</Project>

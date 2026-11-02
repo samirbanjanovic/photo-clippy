@@ -1,0 +1,32 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <header class="masthead">
+        <a class="brand" href="">
+            <img src="@Assets["favicon.svg"]" alt="" width="30" height="30" />
+            <span>Photo Clippy</span>
+        </a>
+        <nav aria-label="Main">
+            <NavLink href="" Match="NavLinkMatch.All">Overview</NavLink>
+            <NavLink href="reports">Report</NavLink>
+            <NavLink href="lenses">Lenses</NavLink>
+            <AuthorizeView Roles="@AuthRoles.Admin">
+                <NavLink href="settings">Settings</NavLink>
+            </AuthorizeView>
+        </nav>
+        <ScanPill />
+        <AuthorizeView>
+            <a class="pill account" href="access" title="Your account">@AuthService.DisplayName(context.User)</a>
+        </AuthorizeView>
+    </header>
+    <main>
+        @Body
+    </main>
+    <footer class="colophon">
+        <span>photo-clippy @AppRuntime.ToolVersion</span>
+        <span aria-hidden="true">·</span>
+        <a href="api/v1/snapshot" target="_blank" rel="noopener">JSON API</a>
+        <span aria-hidden="true">·</span>
+        <a href="healthz" target="_blank" rel="noopener">health</a>
+    </footer>
+</div>

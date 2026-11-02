@@ -1,0 +1,314 @@
+@page "/access"
+@using System.Security.Claims
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Account · Photo Clippy</PageTitle>
+
+<section class="hero compact">
+    <p class="eyebrow">Account</p>
+    <h1>@AuthService.DisplayName(User)</h1>
+    <p class="lede">Signed in as <code>@User.Identity?.Name</code> through @Auth.ProviderName(User).</p>
+</section>
+
+@if (ReturnUrl is not null)
+{
+    <p class="notice danger" role="alert">Your account can't open <code>@ReturnUrl</code>.</p>
+}
+
+<section class="card settings" id="session">
+    <h2>Session</h2>
+    <dl class="readonly">
+        <dt>Roles</dt>
+        <dd>
+            @if (Roles.Count == 0)
+            {
+                <span class="muted">Viewer: scans, reports and recommendations</span>
+            }
+            @foreach (var role in Roles)
+            {
+                <span class="badge ok">@role</span>
+            }
+        </dd>
+        <dt>Session length</dt>
+        <dd>@Hours(Auth.Options.SessionHours), extended while you use it</dd>
+    </dl>
+    @if (!Auth.SignInDisabled)
+    {
+        <form method="post" action="auth/logout" class="inline">
+            <AntiforgeryToken />
+            <button type="submit" class="button">Sign out</button>
+        </form>
+    }
+</section>
+
+@if (Auth.IsDirectoryAccount(User))
+{
+    <section class="card settings" id="password">
+        <h2>Password</h2>
+        <p class="subtle">Changing it signs you out everywhere, including here.</p>
+        <form @onsubmit="ChangePasswordAsync">
+            <div class="field-row">
+                <label class="field">
+                    <span class="label">Current password</span>
+                    <input type="password" autocomplete="current-password" @bind="_current" />
+                </label>
+                <label class="field">
+                    <span class="label">New password</span>
+                    <input type="password" autocomplete="new-password" @bind="_next" />
+                </label>
+                <label class="field">
+                    <span class="label">Repeat new password</span>
+                    <input type="password" autocomplete="new-password" @bind="_confirm" />
+                </label>
+            </div>
+            @if (_passwordError is not null)
+            {
+                <p class="field-error" role="alert">@_passwordError</p>
+            }
+            <div class="inline">
+                <button type="submit" class="button primary" disabled="@_busy">Change password</button>
+            </div>
+        </form>
+    </section>
+}
+
+@if (IsAdmin && Auth.Directory is not null)
+{
+    <section class="card settings" id="accounts">
+        <h2>Accounts</h2>
+        <p class="subtle">Stored by @Auth.DirectoryProvider!.DisplayName. Viewers can scan and browse; admins can also change settings and manage accounts.</p>
+        @if (_accountError is not null)
+        {
+            <p class="notice danger" role="alert">@_accountError</p>
+        }
+        @if (_accountNotice is not null)
+        {
+            <p class="notice" role="status">@_accountNotice</p>
+        }
+        @if (_users is null)
+        {
+            <p class="muted">Loading accounts…</p>
+        }
+        else
+        {
+            <table class="table accounts">
+                <thead>
+                    <tr><th>User</th><th>Role</th><th>Last sign-in</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in _users)
+                    {
+                        var admin = user.Roles.Contains(AuthRoles.Admin);
+                        var self = string.Equals(user.Name, User.Identity?.Name, StringComparison.OrdinalIgnoreCase);
+                        <tr>
+                            <td>
+                                <strong>@(user.DisplayName ?? user.Name)</strong>
+                                @if (user.DisplayName is not null)
+                                {
+                                    <span class="muted small">@user.Name</span>
+                                }
+                                @if (self)
+                                {
+                                    <span class="badge">you</span>
+                                }
+                            </td>
+                            <td>@(admin ? "Admin" : "Viewer")</td>
+                            <td class="muted">@(user.LastSignInUtc is { } at ? at.ToLocalTime().ToString("d MMM yyyy HH:mm", CultureInfo.InvariantCulture) : "never")</td>
+                            <td class="row-actions">
+                                @if (_resetting == user.Name)
+                                {
+                                    <form class="inline" @onsubmit="() => ResetPasswordAsync(user.Name)">
+                                        <input type="password" autocomplete="new-password" placeholder="New password" @bind="_resetPassword" />
+                                        <button type="submit" class="button small primary" disabled="@_busy">Set</button>
+                                        <button type="button" class="button small ghost" @onclick="CancelRow">Cancel</button>
+                                    </form>
+                                }
+                                else if (_deleting == user.Name)
+                                {
+                                    <span class="inline">
+                                        <span>Delete @user.Name?</span>
+                                        <button type="button" class="button small danger" disabled="@_busy" @onclick="() => DeleteAsync(user.Name)">Delete</button>
+                                        <button type="button" class="button small ghost" @onclick="CancelRow">Cancel</button>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="inline">
+                                        @if (!self)
+                                        {
+                                            <button type="button" class="button small ghost" @onclick="() => { CancelRow(); _resetting = user.Name; }">Reset password</button>
+                                        }
+                                        <button type="button" class="button small ghost" disabled="@_busy" @onclick="() => SetAdminAsync(user, !admin)">@(admin ? "Make viewer" : "Make admin")</button>
+                                        @if (!self)
+                                        {
+                                            <button type="button" class="button small ghost" @onclick="() => { CancelRow(); _deleting = user.Name; }">Delete</button>
+                                        }
+                                    </span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <h3 class="add-heading">Add an account</h3>
+            <form @onsubmit="CreateAsync">
+                <div class="field-row">
+                    <label class="field">
+                        <span class="label">User name</span>
+                        <input type="text" autocomplete="off" autocapitalize="none" spellcheck="false" @bind="_newName" />
+                    </label>
+                    <label class="field">
+                        <span class="label">Display name</span>
+                        <input type="text" autocomplete="off" placeholder="Optional" @bind="_newDisplayName" />
+                    </label>
+                    <label class="field">
+                        <span class="label">Password</span>
+                        <input type="password" autocomplete="new-password" @bind="_newPassword" />
+                    </label>
+                </div>
+                <div class="inline">
+                    <label class="toggle"><input type="checkbox" @bind="_newAdmin" /> Admin</label>
+                    <button type="submit" class="button primary" disabled="@_busy">Add account</button>
+                </div>
+            </form>
+        }
+    </section>
+}
+
+@if (IsAdmin)
+{
+    <section class="card settings" id="policy">
+        <h2>Access policy</h2>
+        <p class="subtle">Set under <code>auth</code> in the config file or with <code>PHOTO_CLIPPY_AUTH__*</code> variables; restart to apply.</p>
+        <dl class="readonly">
+            <dt>Sign-in methods</dt>
+            <dd>
+                @foreach (var provider in Auth.Providers)
+                {
+                    <span class="chip" title="@provider.Id">@provider.DisplayName</span>
+                }
+            </dd>
+            <dt>Allowed users</dt>
+            <dd>@List(Auth.Options.AllowedUsers, "Anyone the sign-in methods accept")</dd>
+            <dt>Always admin</dt>
+            <dd>@List(Auth.Options.Admins, "Nobody beyond account roles")</dd>
+            <dt>Trusted proxies</dt>
+            <dd class="mono">@List(Auth.Options.TrustedProxies, "None")</dd>
+        </dl>
+    </section>
+}
+
+@code {
+    private ClaimsPrincipal User = new();
+    private IReadOnlyList<DirectoryUser>? _users;
+    private bool _busy;
+    private string? _current, _next, _confirm, _passwordError;
+    private string? _accountError, _accountNotice, _resetting, _resetPassword, _deleting;
+    private string? _newName, _newDisplayName, _newPassword;
+    private bool _newAdmin;
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    private bool IsAdmin => User.IsInRole(AuthRoles.Admin);
+
+    private List<string> Roles => [.. User.FindAll(ClaimTypes.Role).Select(c => c.Value).Distinct(StringComparer.Ordinal)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        User = (await AuthState).User;
+        if (IsAdmin && Auth.Directory is not null)
+        {
+            await LoadUsersAsync();
+        }
+    }
+
+    private async Task LoadUsersAsync() =>
+        _users = [.. (await Auth.Directory!.ListUsersAsync()).OrderBy(u => u.Name, StringComparer.OrdinalIgnoreCase)];
+
+    private async Task ChangePasswordAsync()
+    {
+        _passwordError = null;
+        _busy = true;
+        try
+        {
+            await Auth.ChangeOwnPasswordAsync(User, _current, _next, _confirm, null, CancellationToken.None);
+            Nav.NavigateTo("login?reason=password", forceLoad: true);
+        }
+        catch (UserDirectoryException ex)
+        {
+            _passwordError = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task CreateAsync() => RunAsync(async () =>
+    {
+        var created = await Auth.CreateUserAsync(User, new NewDirectoryUser
+        {
+            Name = _newName?.Trim() ?? string.Empty,
+            DisplayName = string.IsNullOrWhiteSpace(_newDisplayName) ? null : _newDisplayName.Trim(),
+            Password = _newPassword ?? string.Empty,
+            Roles = _newAdmin ? [AuthRoles.Admin] : [],
+        }, CancellationToken.None);
+        _newName = _newDisplayName = _newPassword = null;
+        _newAdmin = false;
+        return $"Added {created.Name}.";
+    });
+
+    private Task ResetPasswordAsync(string name) => RunAsync(async () =>
+    {
+        await Auth.ResetPasswordAsync(User, name, _resetPassword ?? string.Empty, CancellationToken.None);
+        return $"New password set for {name}. Their open sessions end within a minute.";
+    });
+
+    private Task SetAdminAsync(DirectoryUser user, bool admin) => RunAsync(async () =>
+    {
+        await Auth.SetAdminAsync(User, user, admin, CancellationToken.None);
+        return admin ? $"{user.Name} is now an admin." : $"{user.Name} is now a viewer.";
+    });
+
+    private Task DeleteAsync(string name) => RunAsync(async () =>
+    {
+        await Auth.DeleteUserAsync(User, name, CancellationToken.None);
+        return $"Deleted {name}.";
+    });
+
+    private async Task RunAsync(Func<Task<string>> action)
+    {
+        _accountError = _accountNotice = null;
+        _busy = true;
+        try
+        {
+            _accountNotice = await action();
+            CancelRow();
+        }
+        catch (UserDirectoryException ex)
+        {
+            _accountError = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await LoadUsersAsync();
+    }
+
+    private void CancelRow()
+    {
+        _resetting = _deleting = _resetPassword = null;
+    }
+
+    private static string Hours(double hours) =>
+        hours >= 48 ? $"{hours / 24:0.#} days" : $"{hours:0.#} hours";
+
+    private static string List(IReadOnlyCollection<string> values, string empty) =>
+        values.Count == 0 ? empty : string.Join(", ", values);
+}

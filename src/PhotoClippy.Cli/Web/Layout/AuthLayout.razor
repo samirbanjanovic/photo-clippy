@@ -1,0 +1,16 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <header class="masthead">
+        <a class="brand" href="">
+            <img src="@Assets["favicon.svg"]" alt="" width="30" height="30" />
+            <span>Photo Clippy</span>
+        </a>
+    </header>
+    <main class="auth-main">
+        @Body
+    </main>
+    <footer class="colophon">
+        <span>photo-clippy @AppRuntime.ToolVersion</span>
+    </footer>
+</div>

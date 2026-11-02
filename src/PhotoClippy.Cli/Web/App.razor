@@ -1,0 +1,31 @@
+@using Microsoft.AspNetCore.Http
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <base href="/" />
+    <link rel="icon" href="@Assets["favicon.ico"]" sizes="32x32" />
+    <link rel="icon" href="@Assets["favicon.svg"]" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="@Assets["apple-touch-icon.png"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <HeadOutlet @rendermode="PageMode" />
+</head>
+<body>
+    <Routes @rendermode="PageMode" />
+    <div id="blazor-error-ui" role="alert">
+        Something went wrong. <a href="" class="reload">Reload</a>
+    </div>
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+</html>
+
+@code {
+    private static readonly IComponentRenderMode Mode = new InteractiveServerRenderMode(prerender: false);
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    // The sign-in page is plain server-rendered HTML (it posts forms to /auth/*); everything else is interactive.
+    private IComponentRenderMode? PageMode => HttpContext.AcceptsInteractiveRouting() ? Mode : null;
+}

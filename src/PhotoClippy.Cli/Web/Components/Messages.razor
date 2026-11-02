@@ -1,0 +1,12 @@
+@if (Flash?.Error is { } error)
+{
+    <p class="notice danger" role="alert">@error</p>
+}
+@if (Flash?.Notice is { } notice)
+{
+    <p class="notice" role="status">@notice</p>
+}
+
+@code {
+    [Parameter] public Flash? Flash { get; set; }
+}

@@ -1,0 +1,692 @@
+@page "/settings"
+@attribute [Authorize(Roles = AuthRoles.Admin)]
+@using System.Text.Json
+@using PhotoClippy.Plugins.Recommendation
+@inherits LiveComponent
+@inject AppRuntime Runtime
+@inject SettingsService SettingsSvc
+@inject FolderBrowser Browser
+@inject ModelService Models
+
+<PageTitle>Settings · Photo Clippy</PageTitle>
+
+<section class="hero compact">
+    <p class="eyebrow">Settings</p>
+    <h1>Configure the analyser</h1>
+    <p class="lede">Changes are written to <code>@_draft.ConfigPath</code> and take effect straight away, or when the running scan finishes.</p>
+</section>
+
+<nav class="toc">
+    <a href="settings#library">Library</a>
+    <a href="settings#analysis">Analysis</a>
+    <a href="settings#plugins">Components</a>
+    <a href="settings#recommendation">Recommendation</a>
+    <a href="settings#report">Report</a>
+    <a href="settings#schedule">Schedule</a>
+    <a href="settings#models">Models</a>
+    <a href="settings#system">System</a>
+</nav>
+
+<section class="card settings" id="library">
+    <h2>Library</h2>
+    <p class="subtle">Folders scanned recursively for photos. Removing a folder keeps its cached analysis until the next scan prunes it.</p>
+    <Field Label="Photo folders" Path="library.roots" Pins="Pins" Wide>
+        @if (O.Library.Roots.Count == 0)
+        {
+            <p class="notice">No folders yet. Add the folder your photos are mounted at.</p>
+        }
+        <ul class="roots">
+            @foreach (var root in O.Library.Roots.ToList())
+            {
+                <li>
+                    <code>@root</code>
+                    @if (!Directory.Exists(root))
+                    {
+                        <span class="badge warn">missing</span>
+                    }
+                    <button type="button" class="button ghost small" @onclick="() => O.Library.Roots.Remove(root)">Remove</button>
+                </li>
+            }
+        </ul>
+        <div class="inline">
+            <input type="text" placeholder="/photos/2024" @bind="_newRoot" @bind:event="oninput" @onkeydown="OnRootKey" />
+            <button type="button" class="button ghost" disabled="@string.IsNullOrWhiteSpace(_newRoot)" @onclick="AddTypedRoot">Add</button>
+            <button type="button" class="button ghost" @onclick="() => _picking = true">Browse…</button>
+        </div>
+        @if (_picking)
+        {
+            <FolderPicker OnPick="AddRoot" OnClose="() => _picking = false" />
+        }
+    </Field>
+    <Field Label="Ignore" Path="library.ignore" Pins="Pins" Hint="Glob patterns relative to a folder, one per line, e.g. **/exports/**" Wide>
+        <textarea class="mono" rows="3" spellcheck="false" @bind="IgnoreText"></textarea>
+    </Field>
+    <div class="field-row">
+        <Field Label="Follow symbolic links" Path="library.followSymlinks" Pins="Pins">
+            <label class="toggle"><input type="checkbox" @bind="O.Library.FollowSymlinks" /> Follow</label>
+        </Field>
+        <Field Label="Hidden files and folders" Path="library.includeHidden" Pins="Pins">
+            <label class="toggle"><input type="checkbox" @bind="O.Library.IncludeHidden" /> Include</label>
+        </Field>
+    </div>
+</section>
+
+<section class="card settings" id="analysis">
+    <h2>Analysis</h2>
+    <div class="field-row">
+        <Field Label="Cameras" Path="analysis.scope" Pins="Pins" Hint="Phones and compacts are left out unless there are no interchangeable-lens photos.">
+            <select @bind="O.Analysis.Scope">
+                <option value="interchangeable">Interchangeable-lens cameras</option>
+                <option value="all">All cameras, including phones</option>
+            </select>
+        </Field>
+        <Field Label="Pixel analysis" Path="analysis.frames" Pins="Pins" Hint="Composition, genre and colour. Off reads metadata only, which is much faster.">
+            <label class="toggle"><input type="checkbox" @bind="O.Analysis.Frames" /> Analyse image content</label>
+        </Field>
+    </div>
+    <div class="field-row">
+        <Field Label="Taken from" Path="analysis.since" Pins="Pins">
+            <input type="date" @bind="O.Analysis.Since" />
+        </Field>
+        <Field Label="Taken until" Path="analysis.until" Pins="Pins">
+            <input type="date" @bind="O.Analysis.Until" />
+        </Field>
+        <Field Label="Recency half-life (years)" Path="analysis.recencyHalfLifeYears" Pins="Pins" Hint="Weights recent photos more in recommendations. 0 = all equal.">
+            <input type="number" min="0" max="50" step="0.5" @bind="O.Analysis.RecencyHalfLifeYears" />
+        </Field>
+    </div>
+    <div class="field-row">
+        <Field Label="High ISO from" Path="analysis.highIsoThreshold" Pins="Pins">
+            <input type="number" min="100" max="409600" step="100" @bind="O.Analysis.HighIsoThreshold" />
+        </Field>
+        <Field Label="Genre confidence" Path="analysis.minGenreConfidence" Pins="Pins" Hint="Minimum probability to label a photo's genre.">
+            <input type="number" min="0" max="1" step="0.05" @bind="O.Analysis.MinGenreConfidence" />
+        </Field>
+        <Field Label="Junk threshold" Path="analysis.junkThreshold" Pins="Pins" Hint="Screenshots and documents above this are excluded.">
+            <input type="number" min="0" max="1" step="0.05" @bind="O.Analysis.JunkThreshold" />
+        </Field>
+    </div>
+    <details>
+        <summary>Performance</summary>
+        <div class="field-row">
+            <Field Label="I/O concurrency" Path="analysis.ioConcurrency" Pins="Pins" Hint="Raise for network shares.">
+                <input type="number" min="1" max="256" @bind="O.Analysis.IoConcurrency" />
+            </Field>
+            <Field Label="CPU workers" Path="analysis.cpuConcurrency" Pins="Pins" Hint="@($"0 = one per core ({Environment.ProcessorCount}).")">
+                <input type="number" min="0" max="256" @bind="O.Analysis.CpuConcurrency" />
+            </Field>
+            <Field Label="Metadata batch size" Path="analysis.metadataBatchSize" Pins="Pins">
+                <input type="number" min="1" max="4096" @bind="O.Analysis.MetadataBatchSize" />
+            </Field>
+            <Field Label="Retry failed files" Path="analysis.retryFailed" Pins="Pins">
+                <label class="toggle"><input type="checkbox" @bind="O.Analysis.RetryFailed" /> On every scan</label>
+            </Field>
+        </div>
+    </details>
+</section>
+
+<section class="card settings" id="plugins">
+    <h2>Components</h2>
+    <p class="subtle">Each stage is a plugin. Pick which implementations run; out-of-process and directory plugins are configured in the config file.</p>
+    @if (_inventory is null)
+    {
+        <p class="muted">Loading components…</p>
+    }
+    else
+    {
+        @foreach (var kind in Kinds)
+        {
+            var rows = RowsFor(kind);
+            <Field Label="@KindLabel(kind)" Path="@KindPath(kind)" Pins="Pins" Wide>
+                <ul class="plugins">
+                    @foreach (var row in rows)
+                    {
+                        var selected = IsSelected(kind, row.Id);
+                        <li class="@(selected ? "on" : null)">
+                            <label>
+                                @if (kind == ComponentKind.Recommendation)
+                                {
+                                    <input type="radio" name="recommender" checked="@selected" @onchange="() => O.Plugins.Recommender = row.Id" />
+                                }
+                                else
+                                {
+                                    <input type="checkbox" checked="@selected" @onchange="e => Toggle(kind, row.Id, e.Value is true)" />
+                                }
+                                <span class="plugin-id">@row.Id</span>
+                                @if (row.Version is not null)
+                                {
+                                    <span class="muted small">v@(row.Version)</span>
+                                }
+                                <span class="badge">@row.Source</span>
+                                @if (row.Healthy is true)
+                                {
+                                    <span class="badge ok" title="@row.Health">healthy</span>
+                                }
+                                else if (row.Healthy is false)
+                                {
+                                    <span class="badge warn" title="@row.Health">@(row.Health ?? "unhealthy")</span>
+                                }
+                            </label>
+                            @if (row.Description is not null)
+                            {
+                                <p class="caption">@row.Description</p>
+                            }
+                            @if (kind == ComponentKind.Composition && selected)
+                            {
+                                <label class="inline small">
+                                    Genre weight
+                                    <input type="number" min="0" max="10" step="0.05" value="@GenreWeight(row.Id)" @onchange="e => SetGenreWeight(row.Id, e.Value)" disabled="@(SettingsService.IsPinned(Pins, "plugins.genreWeights", out _))" />
+                                </label>
+                            }
+                        </li>
+                    }
+                </ul>
+            </Field>
+        }
+        @foreach (var note in _inventoryNotes)
+        {
+            <p class="caption">@note</p>
+        }
+        <div class="inline">
+            <button type="button" class="button ghost" disabled="@_checking" @onclick="CheckHealthAsync">@(_checking ? "Checking…" : "Check health")</button>
+        </div>
+    }
+    <dl class="readonly">
+        <dt>Plugin folder</dt><dd><code>@(Runtime.Options.Plugins.Directory ?? Runtime.Paths.Plugins)</code></dd>
+        <dt>External plugins</dt><dd>@O.Plugins.External.Count configured</dd>
+        <dt>Plugin settings</dt><dd>@(O.Plugins.Settings.Count == 0 ? "none" : string.Join(", ", O.Plugins.Settings.Keys))</dd>
+    </dl>
+    <p class="caption">These run code, so they can only be changed in the config file.</p>
+</section>
+
+<section class="card settings" id="recommendation">
+    <h2>Recommendation defaults</h2>
+    <p class="subtle">Pre-fills the <a href="lenses">Lenses</a> page. Rankings only run when you ask for them.</p>
+    <Field Label="Candidate lenses" Path="recommendation.candidates" Pins="Pins" Hint="One per line, e.g. 24-70/2.8 900g $2100" Wide>
+        <textarea class="mono" rows="4" spellcheck="false" @bind="CandidatesText"></textarea>
+    </Field>
+    @foreach (var error in _candidateErrors)
+    {
+        <p class="field-error">@error</p>
+    }
+    <div class="field-row">
+        <Field Label="Priority" Path="recommendation.preset" Pins="Pins">
+            <select @bind="O.Recommendation.Preset">
+                @foreach (var preset in McdaPresets.All)
+                {
+                    <option value="@preset">@preset</option>
+                }
+            </select>
+        </Field>
+        <Field Label="Camera" Path="recommendation.body" Pins="Pins" Hint="Body name or key. Empty = most used recent body.">
+            <input type="text" @bind="BodyText" />
+        </Field>
+        <Field Label="Show top" Path="recommendation.topN" Pins="Pins">
+            <input type="number" min="1" max="50" @bind="O.Recommendation.TopN" />
+        </Field>
+    </div>
+    <div class="field-row">
+        <Field Label="Budget (USD)" Path="recommendation.budgetUsd" Pins="Pins">
+            <input type="number" min="0" step="50" placeholder="no limit" @bind="O.Recommendation.BudgetUsd" />
+        </Field>
+        <Field Label="Max weight (g)" Path="recommendation.maxWeightG" Pins="Pins">
+            <input type="number" min="0" step="10" placeholder="no limit" @bind="O.Recommendation.MaxWeightG" />
+        </Field>
+    </div>
+    <details>
+        <summary>Advanced</summary>
+        <Field Label="Criterion weights" Path="recommendation.weights" Pins="Pins" Hint="@($"Override the priority preset, one per line: criterion=weight. Criteria: {string.Join(", ", McdaPresets.CriterionOrder)}.")" Wide>
+            <textarea class="mono" rows="3" spellcheck="false" @bind="WeightsText"></textarea>
+        </Field>
+        <div class="field-row">
+            <Field Label="Bootstrap resamples" Path="recommendation.bootstrapReplicates" Pins="Pins" Hint="Used for score intervals and P(best).">
+                <input type="number" min="0" max="20000" step="100" @bind="O.Recommendation.BootstrapReplicates" />
+            </Field>
+            <Field Label="Random seed" Path="recommendation.seed" Pins="Pins">
+                <input type="number" @bind="O.Recommendation.Seed" />
+            </Field>
+        </div>
+    </details>
+</section>
+
+<section class="card settings" id="report">
+    <h2>Report</h2>
+    <div class="field-row">
+        <Field Label="Title" Path="report.title" Pins="Pins">
+            <input type="text" @bind="O.Report.Title" />
+        </Field>
+        <Field Label="Theme" Path="report.options.theme" Pins="Pins">
+            <select value="@(ReportOption("theme", "auto"))" @onchange="@(e => SetReportOption("theme", e.Value as string))">
+                <option value="auto">Follow the browser</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+            </select>
+        </Field>
+    </div>
+    <div class="field-row">
+        <Field Label="Tables" Path="report.options.dataTables" Pins="Pins">
+            <label class="toggle"><input type="checkbox" checked="@(ReportFlag("dataTables"))" @onchange="@(e => SetReportOption("dataTables", e.Value is true ? "true" : "false"))" /> Include data tables under charts</label>
+        </Field>
+        <Field Label="Fonts" Path="report.options.embedFonts" Pins="Pins">
+            <label class="toggle"><input type="checkbox" checked="@(ReportFlag("embedFonts"))" @onchange="@(e => SetReportOption("embedFonts", e.Value is true ? "true" : "false"))" /> Embed fonts (works offline)</label>
+        </Field>
+    </div>
+    <h3 class="small-heading">Outputs</h3>
+    <div class="chips">
+        @foreach (var row in RowsFor(ComponentKind.Report))
+        {
+            <label class="chip @(IsSelected(ComponentKind.Report, row.Id) ? "on" : null)">
+                <input type="checkbox" checked="@IsSelected(ComponentKind.Report, row.Id)" disabled="@(SettingsService.IsPinned(Pins, "plugins.reports", out _))" @onchange="e => Toggle(ComponentKind.Report, row.Id, e.Value is true)" />
+                @row.Id.Replace("builtin.report.", string.Empty, StringComparison.Ordinal)
+            </label>
+        }
+    </div>
+    <dl class="readonly">
+        <dt>Written to</dt><dd><code>@Runtime.Options.Report.Output</code></dd>
+    </dl>
+</section>
+
+<section class="card settings" id="schedule">
+    <h2>Schedule</h2>
+    <div class="field-row">
+        <Field Label="Rescan every (hours)" Path="serve.rescanHours" Pins="Pins" Hint="0 = only when you press Scan. Only new or changed files are read again.">
+            <input type="number" min="0" max="8760" step="1" @bind="O.Serve.RescanHours" />
+        </Field>
+        <Field Label="On start" Path="serve.runOnStart" Pins="Pins">
+            <label class="toggle"><input type="checkbox" @bind="O.Serve.RunOnStart" /> Scan when the server starts</label>
+        </Field>
+    </div>
+    <dl class="readonly">
+        <dt>Listening on</dt><dd><code>@Runtime.Options.Serve.Urls</code></dd>
+        <dt>Browsable folders</dt><dd>@foreach (var root in Browser.Roots) { <code>@root</code> }</dd>
+    </dl>
+    <p class="caption">Set <code>serve.urls</code> and <code>serve.browseRoots</code> in the config file or environment; they need a restart.</p>
+</section>
+
+<section class="card settings" id="models">
+    <h2>Models</h2>
+    <p class="subtle">Image-recognition models used by composition plugins. They are downloaded once and stay on this server.</p>
+    @if (_models is null)
+    {
+        <p class="muted">Loading…</p>
+    }
+    else if (_models.Count == 0)
+    {
+        <p class="muted">No selected plugin needs a model.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead><tr><th>Plugin</th><th>File</th><th class="num">Size</th><th>Licence</th><th>Status</th></tr></thead>
+            <tbody>
+                @foreach (var model in _models)
+                {
+                    <tr>
+                        <td>@model.PluginId</td>
+                        <td><code>@model.RelativePath</code></td>
+                        <td class="num">@(model.SizeBytes is { } size ? Fmt.Bytes(size) : "–")</td>
+                        <td>@(model.License ?? "–")</td>
+                        <td>@if (model.Present) { <span class="badge ok">ready</span> } else { <span class="badge warn">missing</span> }</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    <div class="inline">
+        <button type="button" class="button ghost" disabled="@(Models.Downloading || _models is null || _models.All(m => m.Present))" @onclick="StartDownload">@(Models.Downloading ? "Downloading…" : "Download missing models")</button>
+        @if (Models.Downloading && Models.Progress is { } progress)
+        {
+            <span class="muted">@progress.RelativePath · @Fmt.Bytes(progress.Downloaded)@(progress.Total is { } total ? $" of {Fmt.Bytes(total)}" : null)</span>
+        }
+        else if (Models.LastMessage is not null)
+        {
+            <span class="@(Models.LastFailed ? "field-error" : "muted")">@Models.LastMessage</span>
+        }
+    </div>
+</section>
+
+<section class="card settings" id="system">
+    <h2>System</h2>
+    <dl class="readonly">
+        <dt>Config file</dt><dd><code>@_draft.ConfigPath</code>@(_draft.ConfigExists ? null : " (created on first save)")</dd>
+        <dt>Data folder</dt><dd><code>@Runtime.Paths.Home</code></dd>
+        <dt>Database</dt><dd><code>@Runtime.Paths.Database</code></dd>
+        <dt>Models</dt><dd><code>@Runtime.Paths.Models</code></dd>
+        <dt>Version</dt><dd>@AppRuntime.ToolVersion · .NET @Environment.Version</dd>
+    </dl>
+    @if (Pins.Count > 0)
+    {
+        <p class="caption">Some settings are fixed by the environment or command line and are greyed out above: @string.Join(", ", Pins.Keys.Order(StringComparer.Ordinal)).</p>
+    }
+</section>
+
+<div class="@SaveBarClass">
+    <div class="savebar-inner">
+        <div class="savebar-status">
+            @if (_errors.Count > 0)
+            {
+                <ul class="field-error">@foreach (var error in _errors) { <li>@error</li> }</ul>
+            }
+            else if (Dirty)
+            {
+                <span>Unsaved changes</span>
+            }
+            else if (SettingsSvc.PendingApply)
+            {
+                <span>Saved. Applies when the running scan finishes.</span>
+            }
+            else if (_message is not null)
+            {
+                <span>@_message</span>
+            }
+            @foreach (var warning in _warnings)
+            {
+                <span class="muted small">@warning</span>
+            }
+        </div>
+        <div class="savebar-actions">
+            <button type="button" class="button ghost" disabled="@(!Dirty || _saving)" @onclick="Revert">Revert</button>
+            <button type="button" class="button primary" disabled="@(!Dirty || _saving)" @onclick="SaveAsync">@(_saving ? "Saving…" : "Save")</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly ComponentKind[] Kinds = [ComponentKind.Metadata, ComponentKind.Composition, ComponentKind.Color, ComponentKind.Recommendation];
+
+    private SettingsDraft _draft = default!;
+    private string _baseline = string.Empty;
+    private IReadOnlyList<PluginRow>? _inventory;
+    private IReadOnlyList<string> _inventoryNotes = [];
+    private IReadOnlyList<ModelStatusRow>? _models;
+    private IReadOnlyList<string> _errors = [];
+    private IReadOnlyList<string> _warnings = [];
+    private IReadOnlyList<string> _candidateErrors = [];
+    private string? _message;
+    private string _newRoot = string.Empty;
+    private bool _picking;
+    private bool _saving;
+    private bool _checking;
+
+    private AppOptions O => _draft.Options;
+
+    private IReadOnlyDictionary<string, string> Pins => _draft.Pins;
+
+    private bool Dirty => Serialize(O) != _baseline;
+
+    private string SaveBarClass => Dirty || _errors.Count > 0 || _message is not null || SettingsSvc.PendingApply ? "savebar visible" : "savebar";
+
+    private string IgnoreText
+    {
+        get => string.Join("\n", O.Library.Ignore);
+        set => O.Library.Ignore = Lines(value);
+    }
+
+    private string CandidatesText
+    {
+        get => string.Join("\n", O.Recommendation.Candidates);
+        set
+        {
+            O.Recommendation.Candidates = Lines(value);
+            RecommendationRunner.ParseCandidates(O.Recommendation.Candidates, out _candidateErrors);
+        }
+    }
+
+    private string BodyText
+    {
+        get => O.Recommendation.Body ?? string.Empty;
+        set => O.Recommendation.Body = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private string WeightsText
+    {
+        get => string.Join("\n", O.Recommendation.Weights.Select(w => $"{w.Key}={w.Value.ToString(CultureInfo.InvariantCulture)}"));
+        set
+        {
+            var weights = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            var errors = new List<string>();
+            foreach (var line in Lines(value))
+            {
+                var parts = line.Split('=', 2, StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var weight))
+                {
+                    weights[parts[0]] = weight;
+                }
+                else
+                {
+                    errors.Add($"Can't read the weight \"{line}\"; use criterion=number.");
+                }
+            }
+
+            O.Recommendation.Weights = weights;
+            _errors = errors;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Load();
+        Models.Changed += OnModelsChanged;
+        await Task.WhenAll(LoadInventoryAsync(false), LoadModelsAsync());
+    }
+
+    private void Load()
+    {
+        _draft = SettingsSvc.LoadDraft();
+        _baseline = Serialize(O);
+        _errors = [];
+        _candidateErrors = [];
+    }
+
+    private async Task LoadInventoryAsync(bool health)
+    {
+        try
+        {
+            var (rows, notes) = await Task.Run(() => PluginInventory.CollectAsync(Runtime, health, Disposing), Disposing);
+            _inventory = rows;
+            _inventoryNotes = notes;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _inventory ??= [];
+            _inventoryNotes = [$"Could not list components: {ex.Message}"];
+        }
+    }
+
+    private async Task LoadModelsAsync()
+    {
+        try
+        {
+            _models = await Models.StatusAsync(Disposing);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task CheckHealthAsync()
+    {
+        _checking = true;
+        await LoadInventoryAsync(true);
+        _checking = false;
+    }
+
+    private void StartDownload()
+    {
+        if (!Models.TryStartDownload(Disposing))
+        {
+            _message = "A download is already running.";
+        }
+    }
+
+    private void OnModelsChanged() => _ = InvokeAsync(async () =>
+    {
+        if (!Models.Downloading)
+        {
+            await LoadModelsAsync();
+        }
+
+        StateHasChanged();
+    });
+
+    private protected override Task OnServerEventAsync(ServerEvent serverEvent)
+    {
+        if (serverEvent.Type == "config.applied" && !Dirty && !_saving)
+        {
+            Load();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _message = null;
+        try
+        {
+            var outcome = await SettingsSvc.SaveAsync(O, Browser, Disposing);
+            _errors = outcome.Errors;
+            _warnings = outcome.Warnings;
+            if (outcome.Saved)
+            {
+                Load();
+                _message = outcome.Deferred ? null : "Saved and applied.";
+                _ = LoadModelsAsync();
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Revert()
+    {
+        Load();
+        _warnings = [];
+        _message = null;
+    }
+
+    private void AddRoot(string path)
+    {
+        if (!O.Library.Roots.Contains(path, StringComparer.Ordinal))
+        {
+            O.Library.Roots.Add(path);
+        }
+
+        _picking = false;
+    }
+
+    private void AddTypedRoot()
+    {
+        if (!string.IsNullOrWhiteSpace(_newRoot))
+        {
+            AddRoot(_newRoot.Trim());
+            _newRoot = string.Empty;
+        }
+    }
+
+    private void OnRootKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddTypedRoot();
+        }
+    }
+
+    private IReadOnlyList<PluginRow> RowsFor(ComponentKind kind)
+    {
+        var rows = (_inventory ?? []).Where(r => r.Kind == kind).ToList();
+        foreach (var id in Configured(kind).Where(id => !rows.Any(r => string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase))))
+        {
+            rows.Add(new PluginRow(id, kind, null, "not found", null, true, false, "not installed", null, []));
+        }
+
+        return rows;
+    }
+
+    private IEnumerable<string> Configured(ComponentKind kind) => kind == ComponentKind.Recommendation ? [O.Plugins.Recommender] : ListFor(kind);
+
+    private List<string> ListFor(ComponentKind kind) => kind switch
+    {
+        ComponentKind.Metadata => O.Plugins.Metadata,
+        ComponentKind.Composition => O.Plugins.Composition,
+        ComponentKind.Color => O.Plugins.Color,
+        ComponentKind.Report => O.Plugins.Reports,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    private bool IsSelected(ComponentKind kind, string id) => Configured(kind).Contains(id, StringComparer.OrdinalIgnoreCase);
+
+    private void Toggle(ComponentKind kind, string id, bool on)
+    {
+        var list = ListFor(kind);
+        if (on && !list.Contains(id, StringComparer.OrdinalIgnoreCase))
+        {
+            list.Add(id);
+        }
+        else if (!on)
+        {
+            list.RemoveAll(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private static string KindLabel(ComponentKind kind) => kind switch
+    {
+        ComponentKind.Metadata => "Metadata: camera, lens and exposure",
+        ComponentKind.Composition => "Composition: genre and framing",
+        ComponentKind.Color => "Colour and light",
+        ComponentKind.Recommendation => "Recommender",
+        _ => kind.ToString(),
+    };
+
+    private static string KindPath(ComponentKind kind) => kind switch
+    {
+        ComponentKind.Metadata => "plugins.metadata",
+        ComponentKind.Composition => "plugins.composition",
+        ComponentKind.Color => "plugins.color",
+        ComponentKind.Recommendation => "plugins.recommender",
+        _ => "plugins.reports",
+    };
+
+    private string GenreWeight(string id) =>
+        (O.Plugins.GenreWeights.TryGetValue(id, out var weight) ? weight : 1.0).ToString(CultureInfo.InvariantCulture);
+
+    private void SetGenreWeight(string id, object? value)
+    {
+        if (double.TryParse(value as string, NumberStyles.Float, CultureInfo.InvariantCulture, out var weight))
+        {
+            O.Plugins.GenreWeights[id] = weight;
+        }
+    }
+
+    private string ReportOption(string key, string fallback) =>
+        O.Report.Options.FirstOrDefault(kv => string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase)).Value is { Length: > 0 } value ? value : fallback;
+
+    private bool ReportFlag(string key) => ReportOption(key, "true").Trim().ToLowerInvariant() is not ("false" or "0" or "no" or "off");
+
+    private void SetReportOption(string key, string? value)
+    {
+        var existing = O.Report.Options.Keys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)) ?? key;
+        O.Report.Options[existing] = value ?? string.Empty;
+    }
+
+    private static List<string> Lines(string? text) =>
+        [.. (text ?? string.Empty).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+
+    private static string Serialize(AppOptions options) => JsonSerializer.Serialize(options, ConfigLoader.JsonOptions);
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Models.Changed -= OnModelsChanged;
+        }
+
+        base.Dispose(disposing);
+    }
+}

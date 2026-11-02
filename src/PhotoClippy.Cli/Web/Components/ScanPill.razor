@@ -1,0 +1,23 @@
+@inherits LiveComponent
+
+@{
+    var state = Coordinator.State;
+}
+<a class="pill pill-@state.State" href="" title="Scan status">
+    <span class="dot"></span>
+    @switch (state.State)
+    {
+        case "running":
+            <span>@Fmt.Stage(state.Stage)@(state.Total is > 0 ? $" · {Fmt.Pct(state.Completed / (double)state.Total.Value)}" : string.Empty)</span>
+            break;
+        case "failed":
+            <span>Last scan failed</span>
+            break;
+        case "completed":
+            <span>Up to date</span>
+            break;
+        default:
+            <span>Idle</span>
+            break;
+    }
+</a>

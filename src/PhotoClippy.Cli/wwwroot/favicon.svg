@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Photo Clippy</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFD93D"/>
+      <stop offset=".5" stop-color="#FF8F3F"/>
+      <stop offset="1" stop-color="#FF3D8B"/>
+    </linearGradient>
+    <linearGradient id="wire" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6BFFE6"/>
+      <stop offset="1" stop-color="#3D6BFF"/>
+    </linearGradient>
+    <path id="clip" fill="none" stroke-linecap="round" stroke-linejoin="round"
+          d="M-40 55V-55A40 40 0 0 1 40 -55V110A70 70 0 0 1 -100 110V-100A100 100 0 0 1 100 -100V75"/>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <g transform="translate(32 33) rotate(-16) scale(.118)">
+    <use href="#clip" stroke="#2A1659" stroke-width="42"/>
+    <use href="#clip" stroke="url(#wire)" stroke-width="28"/>
+    <g stroke="#2A1659" stroke-width="12" fill="#FFFFFF">
+      <ellipse cx="-40" cy="-108" rx="38" ry="42"/>
+      <ellipse cx="40" cy="-108" rx="38" ry="42"/>
+    </g>
+    <circle cx="-30" cy="-108" r="20" fill="#1B0E3A"/>
+    <circle cx="50" cy="-108" r="20" fill="#1B0E3A"/>
+  </g>
+</svg>

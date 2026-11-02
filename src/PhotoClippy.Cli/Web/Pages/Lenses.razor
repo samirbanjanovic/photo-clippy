@@ -1,0 +1,381 @@
+@page "/lenses"
+@using PhotoClippy.Core.Services
+@using PhotoClippy.Plugins.Recommendation
+@inherits LiveComponent
+@inject AppRuntime Runtime
+@inject SettingsService Settings
+@inject FolderBrowser Browser
+
+<PageTitle>Lenses · Photo Clippy</PageTitle>
+
+<section class="hero compact">
+    <p class="eyebrow">Next lens</p>
+    <h1>Compare candidate lenses</h1>
+    <p class="lede">List the lenses you are considering. They are scored against how you actually shoot: your focal lengths, apertures, light and subjects, and against the lenses you already own.</p>
+</section>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_snapshot is null)
+{
+    <section class="empty">
+        <h2>Analyse your library first</h2>
+        <p>Candidates are ranked against your shooting profile. Run a scan from the <a href="">overview</a>, then come back.</p>
+    </section>
+}
+else
+{
+    <div class="columns">
+        <section class="card">
+            <h2>Candidates</h2>
+            <p class="subtle">One per line or comma-separated: <code>24/1.4</code>, <code>24-70/2.8</code>, <code>100-400/4.5-5.6</code>. Add <code>1060g</code>, <code>$2800</code> or a <code>"label"</code> to score weight and price.</p>
+            <textarea class="mono" rows="6" spellcheck="false" placeholder="@Placeholder" @bind="Text" @bind:event="oninput"></textarea>
+            <div class="chips suggestions">
+                <span class="muted">Add:</span>
+                @foreach (var suggestion in Suggestions)
+                {
+                    <button type="button" class="chip ghost" @onclick="() => Append(suggestion)">@suggestion</button>
+                }
+            </div>
+            @if (_parsed.Count > 0)
+            {
+                <div class="chips">
+                    @foreach (var lens in _parsed)
+                    {
+                        <span class="chip" title="@lens.Name">@lens.ShortName@(lens.WeightG is { } g ? $" · {g:0}g" : null)@(lens.PriceUsd is { } usd ? $" · ${usd:0}" : null)</span>
+                    }
+                </div>
+            }
+            @foreach (var error in _parseErrors)
+            {
+                <p class="field-error">@error</p>
+            }
+        </section>
+
+        <section class="card">
+            <h2>Your kit</h2>
+            <label class="field">
+                <span class="label">Camera</span>
+                <select @bind="Body">
+                    <option value="">Auto: @(_snapshot.Profile.Target?.BodyDisplay ?? "most used recent body")</option>
+                    @foreach (var system in _snapshot.Systems.Where(s => s.BodyKey is not null))
+                    {
+                        <option value="@system.BodyKey">@system.BodyDisplay (@system.Format)</option>
+                    }
+                </select>
+            </label>
+            @{
+                var owned = Owned();
+            }
+            @if (owned.Count == 0)
+            {
+                <p class="muted">No lenses seen on this camera yet.</p>
+            }
+            else
+            {
+                <ul class="owned">
+                    @foreach (var lens in owned)
+                    {
+                        <li><span>@lens.Lens.Name</span><span class="muted">@Fmt.N(lens.Captures) frames</span></li>
+                    }
+                </ul>
+            }
+
+            <div class="field-row">
+                <label class="field">
+                    <span class="label">Priority</span>
+                    <select @bind="_preset">
+                        @foreach (var preset in McdaPresets.All)
+                        {
+                            <option value="@preset">@preset</option>
+                        }
+                    </select>
+                </label>
+                <label class="field">
+                    <span class="label">Show top</span>
+                    <input type="number" min="1" max="50" @bind="_top" />
+                </label>
+            </div>
+            <div class="field-row">
+                <label class="field">
+                    <span class="label">Budget (USD)</span>
+                    <input type="number" min="0" step="50" placeholder="no limit" @bind="_budget" />
+                </label>
+                <label class="field">
+                    <span class="label">Max weight (g)</span>
+                    <input type="number" min="0" step="10" placeholder="no limit" @bind="_maxWeight" />
+                </label>
+            </div>
+        </section>
+    </div>
+
+    <section class="actions">
+        <button class="button primary" disabled="@(_busy || _parsed.Count == 0 || _parseErrors.Count > 0)" @onclick="RankAsync">@(_busy ? "Ranking…" : "Rank these lenses")</button>
+        <button class="button ghost" disabled="@(_busy || _parseErrors.Count > 0)" @onclick="SaveDefaultsAsync" title="Pre-fill these candidates and preferences next time (saved to the config file)">Save as defaults</button>
+        @if (_notice is not null)
+        {
+            <span class="muted">@_notice</span>
+        }
+    </section>
+    @if (_error is not null)
+    {
+        <p class="notice danger">@_error</p>
+    }
+
+    @if (_result is { } set)
+    {
+        <section class="card results">
+            <p class="eyebrow">@set.Target.BodyDisplay · @set.Preset · @Fmt.N(set.SampleCount) frames · @set.CandidateCount candidates</p>
+            @if (set.Headline is not null)
+            {
+                <h2 class="headline">@set.Headline</h2>
+            }
+            <ol class="ranking">
+                @foreach (var lens in set.Ranked)
+                {
+                    <li class="@(lens.Rank == 1 ? "winner" : null)">
+                        <div class="rank">@lens.Rank</div>
+                        <div class="lens">
+                            <div class="lens-name">
+                                <strong>@lens.Lens.Name</strong>
+                                @if (lens.AlreadyOwned)
+                                {
+                                    <span class="badge">owned</span>
+                                }
+                                @if (lens.RedundantWith is not null && lens.Redundancy >= 0.35)
+                                {
+                                    <span class="badge warn">overlaps @lens.RedundantWith</span>
+                                }
+                            </div>
+                            @if (lens.Verdict is not null)
+                            {
+                                <p class="verdict">@lens.Verdict</p>
+                            }
+                            <details>
+                                <summary>Why</summary>
+                                <div class="criteria">
+                                    @foreach (var criterion in set.Criteria)
+                                    {
+                                        if (lens.Criteria.TryGetValue(criterion.Id, out var value))
+                                        {
+                                            <div class="criterion" title="@criterion.Description">
+                                                <span>@criterion.Name</span>
+                                                <span class="bar-track"><span class="bar-fill" style="width:@Pct100(value)"></span></span>
+                                                <span>@Fmt.Num(value * 100, "0")</span>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                                @if (lens.Evidence.Count > 0)
+                                {
+                                    <h4>Evidence</h4>
+                                    <ul>@foreach (var e in lens.Evidence) { <li>@e</li> }</ul>
+                                }
+                                @if (lens.TradeOffs.Count > 0)
+                                {
+                                    <h4>Trade-offs</h4>
+                                    <ul>@foreach (var t in lens.TradeOffs) { <li>@t</li> }</ul>
+                                }
+                                @if (lens.WinsInsteadWhen.Count > 0)
+                                {
+                                    <h4>Would win instead if</h4>
+                                    <ul>@foreach (var w in lens.WinsInsteadWhen) { <li>@w</li> }</ul>
+                                }
+                            </details>
+                        </div>
+                        <div class="score">
+                            <span class="score-value">@Fmt.Num(lens.Score * 100, "0")</span>
+                            <span class="score-band" title="80% interval @Fmt.Num(lens.ScoreLow * 100, "0")–@Fmt.Num(lens.ScoreHigh * 100, "0")">
+                                <span class="band" style="left:@Pct100(lens.ScoreLow);width:@Pct100(lens.ScoreHigh - lens.ScoreLow)"></span>
+                                <span class="point" style="left:@Pct100(lens.Score)"></span>
+                            </span>
+                            <span class="muted small">best in @Fmt.Pct(lens.ProbabilityBest) of resamples</span>
+                        </div>
+                    </li>
+                }
+            </ol>
+            @if (set.PresetWinners.Count > 0)
+            {
+                <p class="caption">
+                    If your priority were different:
+                    @foreach (var (preset, winner) in set.PresetWinners)
+                    {
+                        <span class="chip ghost">@preset → @winner</span>
+                    }
+                </p>
+            }
+            @foreach (var note in set.Notes.Concat(set.Assumptions))
+            {
+                <p class="caption">@note</p>
+            }
+            <p><a href="reports">See it in the full report</a></p>
+        </section>
+    }
+}
+
+@code {
+    private const string Placeholder = "24/1.4\n14-24/2.8\n24-70/2.8 900g $2100\n35/1.2\n50/1.2";
+
+    private static readonly string[] Suggestions = ["24/1.4", "14-24/2.8", "24-70/2.8", "35/1.2", "50/1.2", "85/1.4", "70-200/2.8"];
+
+    private AnalysisSnapshot? _snapshot;
+    private RecommendationSet? _result;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string? _notice;
+    private string _text = string.Empty;
+    private string? _body;
+    private string _preset = "balanced";
+    private int _top = 8;
+    private double? _budget;
+    private double? _maxWeight;
+    private IReadOnlyList<LensSpec> _parsed = [];
+    private IReadOnlyList<string> _parseErrors = [];
+
+    private string Text
+    {
+        get => _text;
+        set
+        {
+            _text = value;
+            _parsed = RecommendationRunner.ParseCandidates(Fmt.CandidateEntries(value), out _parseErrors);
+        }
+    }
+
+    private string Body
+    {
+        get => _body ?? string.Empty;
+        set => _body = string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var options = Runtime.Options.Recommendation;
+        _preset = options.Preset;
+        _top = options.TopN;
+        _budget = options.BudgetUsd;
+        _maxWeight = options.MaxWeightG;
+        await LoadAsync(initial: true);
+    }
+
+    private async Task LoadAsync(bool initial)
+    {
+        try
+        {
+            _snapshot = await Runtime.Store.LoadLatestSnapshotAsync(Disposing);
+            _result = _snapshot?.Recommendation;
+            if (initial && _snapshot is not null)
+            {
+                var configuredBody = Runtime.Options.Recommendation.Body;
+                _body = _snapshot.Systems.FirstOrDefault(s => configuredBody is not null && string.Equals(s.BodyKey, configuredBody, StringComparison.OrdinalIgnoreCase))?.BodyKey;
+                Text = Runtime.Options.Recommendation.Candidates.Count > 0
+                    ? string.Join("\n", Runtime.Options.Recommendation.Candidates)
+                    : _result is { } previous ? string.Join("\n", previous.Ranked.Select(r => Fmt.Shorthand(r.Lens))) : string.Empty;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private protected override async Task OnServerEventAsync(ServerEvent serverEvent)
+    {
+        if (serverEvent.Type == "scan.completed" && !_busy)
+        {
+            await LoadAsync(initial: false);
+        }
+    }
+
+    private void Append(string shorthand)
+    {
+        var lines = Fmt.CandidateEntries(_text).ToList();
+        if (!lines.Any(l => l.Split(',').Any(part => string.Equals(part.Trim(), shorthand, StringComparison.OrdinalIgnoreCase))))
+        {
+            lines.Add(shorthand);
+        }
+
+        Text = string.Join("\n", lines);
+    }
+
+    private IReadOnlyList<OwnedLens> Owned()
+    {
+        if (_snapshot is null)
+        {
+            return [];
+        }
+
+        var key = _body ?? _snapshot.Profile.Target?.BodyKey ?? _snapshot.Systems.FirstOrDefault()?.BodyKey;
+        return key is not null && _snapshot.OwnedByBody.TryGetValue(key, out var owned) ? owned : _body is null ? _snapshot.Owned : [];
+    }
+
+    private async Task RankAsync()
+    {
+        _busy = true;
+        _error = null;
+        _notice = null;
+        try
+        {
+            var request = new RecommendRequest
+            {
+                Candidates = Fmt.CandidateEntries(_text),
+                Body = _body,
+                Preset = _preset,
+                Top = _top,
+                BudgetUsd = _budget,
+                MaxWeightG = _maxWeight,
+            };
+            _result = await Coordinator.RecommendAsync(request, Disposing);
+            if (_result is null)
+            {
+                _error = "There is no interchangeable-lens camera in the library, so there is nothing to recommend lenses for.";
+            }
+        }
+        catch (BusyException)
+        {
+            _error = "A scan is running. Rank again when it finishes.";
+        }
+        catch (CliException ex)
+        {
+            _error = ex.Hint is null ? ex.Message : $"{ex.Message} {ex.Hint}";
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveDefaultsAsync()
+    {
+        _error = null;
+        var draft = Settings.LoadDraft();
+        var r = draft.Options.Recommendation;
+        r.Candidates = [.. Fmt.CandidateEntries(_text)];
+        r.Preset = _preset;
+        r.TopN = _top;
+        r.BudgetUsd = _budget;
+        r.MaxWeightG = _maxWeight;
+        r.Body = _body;
+        var outcome = await Settings.SaveAsync(draft.Options, Browser, Disposing);
+        if (outcome.Saved)
+        {
+            _notice = outcome.Deferred ? "Saved. Applies when the running scan finishes." : "Saved as defaults.";
+        }
+        else
+        {
+            _error = string.Join(" ", outcome.Errors);
+        }
+    }
+
+    private static string Pct100(double value) =>
+        (Math.Clamp(value, 0, 1) * 100).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+}

@@ -1,0 +1,24 @@
+<Router AppAssembly="typeof(Routes).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <RedirectToLogin />
+                }
+                else
+                {
+                    <section class="hero">
+                        <p class="eyebrow">Admins only</p>
+                        <h1>Not for this account</h1>
+                        <p class="lede">This page needs the admin role. <a href="access">Your account</a> · <a href="">Overview</a></p>
+                    </section>
+                }
+            </NotAuthorized>
+            <Authorizing>
+                <p class="muted">Checking your session…</p>
+            </Authorizing>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

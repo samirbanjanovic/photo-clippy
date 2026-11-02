@@ -1,0 +1,67 @@
+# Photo Clippy: a web UI on your internal network for exploring photo habits and ranking candidate lenses.
+#   /          overview      /reports  full report + CSV/JSON downloads
+#   /lenses    rank lenses   /settings library folders, analysis, components, schedule, models
+#   /api/v1/*  JSON API      /healthz  health probe
+#
+#   cd src/deploy
+#   docker compose build
+#   docker compose up -d        # then open http://<host>:8095 (or the Traefik host below)
+#
+# Configure everything from Settings; it is saved to /data/photo-clippy.json and applied without a restart.
+# Any PHOTO_CLIPPY_* variable set below overrides the file and shows as locked (greyed out) in the UI, so only
+# set the ones you want fixed. The CLIP subject model (~330 MB) is downloaded from Settings → Models; without it
+# subjects come from the heuristic analyzer only.
+#
+# Sign-in: on first start the log prints a one-time setup code for creating the first admin in the UI
+#   docker logs photo-clippy 2>&1 | grep 'setup code'
+# or create accounts from the CLI (works while it runs):
+#   docker exec -it photo-clippy photo-clippy users add <name> --admin
+# Admins manage accounts on the Account page. Serve it over HTTPS (Traefik below) so passwords aren't sent in clear text.
+
+services:
+  photo-clippy:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: photo-clippy:latest
+    container_name: photo-clippy
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    networks:
+      - traefik-network
+    ports:
+      - "8095:8080"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      # Config written by the UI, cache (SQLite), models, snapshots, reports and UI session keys.
+      - ${PHOTO_CLIPPY_DATA:-/mnt/cvolumes/apps/photo-clippy}:/data
+      # Libraries are read-only. Settings → Library can pick any folder under /photos; on first start
+      # everything under /photos is scanned.
+      - /mnt/media/photos/Pictures:/photos/media/Pictures:ro
+      - /mnt/xi/photos/Processed:/photos/xi/Processed:ro
+      - /mnt/xi/photos/Other:/photos/xi/Other:ro
+    environment:
+      - TZ=America/New_York
+      # Examples of locking a setting (it becomes read-only in the UI):
+      # - PHOTO_CLIPPY_SERVE__RESCANHOURS=24
+      # - PHOTO_CLIPPY_PLUGINS__METADATA__1=builtin.metadata.exiftool
+      # Sign-in policy (read at start-up):
+      # - PHOTO_CLIPPY_AUTH__ADMINS__0=samir
+      # - PHOTO_CLIPPY_AUTH__SESSIONHOURS=24
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"ok\"' <&3"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.photo-clippy.rule=Host(`photo-clippy.example.com`)"
+      - "traefik.http.routers.photo-clippy.entrypoints=websecure"
+      - "traefik.http.routers.photo-clippy.tls.certresolver=letsencrypt"
+      - "traefik.http.services.photo-clippy.loadbalancer.server.port=8080"
+
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,103 @@
+{
+  "version": "1",
+  "genres": [
+    {
+      "id": "landscape", "name": "Landscape", "group": "Places",
+      "prompts": ["a landscape photograph of mountains", "a scenic nature landscape with a sky", "a photo of a forest", "a photo of a lake surrounded by hills", "a photo of the sea and a rocky coastline", "a wide view of a valley at sunset"],
+      "affinity": { "focalMin35": 14, "focalMax35": 35, "prefersFast": false, "wantsIsolation": false }
+    },
+    {
+      "id": "cityscape", "name": "Cityscape", "group": "Places",
+      "prompts": ["a cityscape photo of a city skyline", "an aerial view over a city", "a panorama of rooftops in a town"],
+      "affinity": { "focalMin35": 16, "focalMax35": 50, "prefersFast": false, "wantsIsolation": false }
+    },
+    {
+      "id": "architecture", "name": "Architecture", "group": "Places",
+      "prompts": ["a photo of a building's architecture", "a photo of a church facade", "a modern building exterior", "a photo of a bridge", "architectural details of a building"],
+      "affinity": { "focalMin35": 14, "focalMax35": 35, "prefersFast": false, "wantsIsolation": false }
+    },
+    {
+      "id": "interior", "name": "Interior", "group": "Places",
+      "prompts": ["a photo of a room interior", "the interior of a house", "the inside of a cathedral", "a hotel room"],
+      "affinity": { "focalMin35": 14, "focalMax35": 28, "prefersFast": true, "fastAperture": 2.8, "wantsIsolation": false }
+    },
+    {
+      "id": "portrait", "name": "Portrait", "group": "People",
+      "prompts": ["a portrait photo of a person", "a close-up headshot of a person", "a portrait of a child", "a portrait of a woman with a blurred background", "a portrait of a man"],
+      "affinity": { "focalMin35": 50, "focalMax35": 135, "prefersFast": true, "fastAperture": 2.0, "wantsIsolation": true }
+    },
+    {
+      "id": "people", "name": "People & events", "group": "People",
+      "prompts": ["a group of people at an event", "a family photo", "people celebrating at a party", "a wedding ceremony", "friends sitting around a table"],
+      "affinity": { "focalMin35": 24, "focalMax35": 70, "prefersFast": true, "fastAperture": 2.8, "wantsIsolation": false }
+    },
+    {
+      "id": "street", "name": "Street", "group": "People",
+      "prompts": ["a street photography photo of people in a city", "a candid photo of pedestrians on a street", "a busy market street"],
+      "affinity": { "focalMin35": 28, "focalMax35": 50, "prefersFast": true, "fastAperture": 2.0, "wantsIsolation": false }
+    },
+    {
+      "id": "performance", "name": "Stage & concert", "group": "People",
+      "prompts": ["a concert performance on stage", "a musician playing on a stage with lights", "a theater performance"],
+      "affinity": { "focalMin35": 70, "focalMax35": 200, "prefersFast": true, "fastAperture": 2.8, "wantsIsolation": true }
+    },
+    {
+      "id": "sports", "name": "Sports & action", "group": "People",
+      "prompts": ["a sports action photo", "a football player running with the ball", "a cyclist racing", "a skier in action", "a child playing soccer"],
+      "affinity": { "focalMin35": 70, "focalMax35": 400, "prefersFast": true, "fastAperture": 2.8, "wantsIsolation": true }
+    },
+    {
+      "id": "wildlife", "name": "Wildlife", "group": "Animals",
+      "prompts": ["a photo of a wild animal in nature", "a photo of a deer in a field", "a photo of a fox", "a photo of a bear"],
+      "affinity": { "focalMin35": 200, "focalMax35": 600, "prefersFast": false, "wantsIsolation": true }
+    },
+    {
+      "id": "birds", "name": "Birds", "group": "Animals",
+      "prompts": ["a photo of a bird perched on a branch", "a bird in flight", "a photo of a seagull"],
+      "affinity": { "focalMin35": 400, "focalMax35": 800, "prefersFast": false, "wantsIsolation": true }
+    },
+    {
+      "id": "pets", "name": "Pets", "group": "Animals",
+      "prompts": ["a photo of a dog", "a photo of a cat", "a pet lying on a sofa"],
+      "affinity": { "focalMin35": 35, "focalMax35": 105, "prefersFast": true, "fastAperture": 2.0, "wantsIsolation": true }
+    },
+    {
+      "id": "macro", "name": "Macro & close-up", "group": "Close-up",
+      "prompts": ["a macro photo of an insect", "an extreme close-up of a flower", "a macro photo of water droplets", "a close-up of a leaf texture"],
+      "affinity": { "focalMin35": 60, "focalMax35": 105, "prefersFast": false, "minMagnification": 0.5, "wantsIsolation": true }
+    },
+    {
+      "id": "food", "name": "Food", "group": "Close-up",
+      "prompts": ["a photo of food on a plate", "a photo of a meal in a restaurant", "a cup of coffee on a table", "a photo of a cake"],
+      "affinity": { "focalMin35": 35, "focalMax35": 100, "prefersFast": true, "fastAperture": 2.8, "minMagnification": 0.15, "wantsIsolation": true }
+    },
+    {
+      "id": "still-life", "name": "Still life & product", "group": "Close-up",
+      "prompts": ["a still life photo of objects on a table", "a product photo of an object", "a photo of a watch"],
+      "affinity": { "focalMin35": 50, "focalMax35": 105, "prefersFast": false, "minMagnification": 0.15, "wantsIsolation": true }
+    },
+    {
+      "id": "vehicles", "name": "Vehicles", "group": "Things",
+      "prompts": ["a photo of a car", "a photo of a motorcycle", "a photo of a train", "a photo of an airplane"],
+      "affinity": { "focalMin35": 35, "focalMax35": 200, "prefersFast": false, "wantsIsolation": false }
+    },
+    {
+      "id": "night", "name": "Night & low light", "group": "Night",
+      "prompts": ["a city street at night with lights", "night photography of illuminated buildings", "a dimly lit bar interior at night", "neon lights at night"],
+      "affinity": { "focalMin35": 24, "focalMax35": 50, "prefersFast": true, "fastAperture": 1.8, "wantsIsolation": false }
+    },
+    {
+      "id": "astro", "name": "Astro", "group": "Night",
+      "prompts": ["a photo of the night sky full of stars", "the milky way over a landscape", "a photo of the moon", "the northern lights aurora in the sky"],
+      "affinity": { "focalMin35": 14, "focalMax35": 24, "prefersFast": true, "fastAperture": 2.0, "wantsIsolation": false }
+    },
+    {
+      "id": "documents", "name": "Documents", "group": "Other", "junk": true,
+      "prompts": ["a scanned document with text", "a photo of a page of text", "a photo of a receipt", "a whiteboard with writing"]
+    },
+    {
+      "id": "screenshots", "name": "Screenshots", "group": "Other", "junk": true,
+      "prompts": ["a screenshot of a phone screen", "a screenshot of a computer screen", "a screenshot of a website"]
+    }
+  ]
+}

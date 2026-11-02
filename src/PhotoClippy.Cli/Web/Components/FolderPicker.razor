@@ -1,0 +1,57 @@
+@inject FolderBrowser Browser
+
+<div class="picker" role="dialog" aria-label="Choose a folder">
+    <div class="picker-head">
+        <strong>Choose a folder</strong>
+        <button type="button" class="button ghost small" @onclick="OnClose">Close</button>
+    </div>
+    <div class="picker-path">
+        @if (_listing.Path.Length == 0)
+        {
+            <span class="muted">Folders this server may browse</span>
+        }
+        else
+        {
+            <code>@_listing.Path</code>
+        }
+    </div>
+    @if (_listing.Error is not null)
+    {
+        <p class="notice danger">@_listing.Error</p>
+    }
+    <ul class="picker-list">
+        @if (_listing.Parent is not null)
+        {
+            <li><button type="button" @onclick="() => Open(_listing.Parent)">↑ Up</button></li>
+        }
+        @foreach (var folder in _listing.Folders)
+        {
+            <li><button type="button" @onclick="() => Open(folder.Path)" title="@folder.Path">@folder.Name</button></li>
+        }
+        @if (_listing.Folders.Count == 0 && _listing.Error is null)
+        {
+            <li class="muted">@(_listing.Path.Length == 0 ? "No browsable folders. Set serve.browseRoots in the config." : "No sub-folders.")</li>
+        }
+    </ul>
+    @if (_listing.Truncated)
+    {
+        <p class="caption">Showing the first folders only; type the path instead if yours is missing.</p>
+    }
+    <div class="picker-actions">
+        <button type="button" class="button primary" disabled="@(_listing.Path.Length == 0 || _listing.Error is not null)" @onclick="() => OnPick.InvokeAsync(_listing.Path)">Use this folder</button>
+    </div>
+</div>
+
+@code {
+    private FolderListing _listing = new(string.Empty, null, [], false);
+
+    [Parameter] public EventCallback<string> OnPick { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public string? Start { get; set; }
+
+    protected override void OnInitialized() => Open(Start);
+
+    private void Open(string? path) => _listing = Browser.List(path);
+}

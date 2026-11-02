@@ -1,0 +1,64 @@
+@page "/reports"
+@inherits LiveComponent
+@inject AppRuntime Runtime
+
+<PageTitle>Report · Photo Clippy</PageTitle>
+
+<section class="hero compact">
+    <p class="eyebrow">Report</p>
+    <h1>@Runtime.Options.Report.Title</h1>
+    @if (_files.Count > 0)
+    {
+        <p class="lede">
+            Rendered @Fmt.Ago(_rendered)
+            @foreach (var file in _files)
+            {
+                <span class="sep">·</span>
+                <a href="@($"report/{Uri.EscapeDataString(file.Name)}")" download="@(file.Extension == ".html" ? null : file.Name)" target="@(file.Extension == ".html" ? "_blank" : null)" rel="noopener">@Label(file)</a>
+            }
+        </p>
+    }
+</section>
+
+@if (_html is null)
+{
+    <section class="empty">
+        <h2>No report yet</h2>
+        <p>The report is written after each scan. Start one from the <a href="">overview</a>.</p>
+    </section>
+}
+else
+{
+    <iframe class="report-frame" title="Photo report" src="@($"report/{Uri.EscapeDataString(_html.Name)}?v={_rendered.ToUnixTimeSeconds()}")"></iframe>
+}
+
+@code {
+    private IReadOnlyList<FileInfo> _files = [];
+    private FileInfo? _html;
+    private DateTimeOffset _rendered;
+
+    protected override void OnParametersSet() => Refresh();
+
+    private protected override Task OnServerEventAsync(ServerEvent serverEvent)
+    {
+        if (serverEvent.Type is "scan.completed" or "recommendation.updated" or "config.applied")
+        {
+            Refresh();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void Refresh()
+    {
+        var directory = new DirectoryInfo(Coordinator.ReportDirectory);
+        var baseName = Runtime.Options.Report.BaseName;
+        _files = directory.Exists
+            ? [.. directory.EnumerateFiles(baseName + "*").Where(f => f.Extension is ".html" or ".json" or ".csv").OrderBy(f => f.Extension == ".html" ? 0 : 1).ThenBy(f => f.Name)]
+            : [];
+        _html = _files.FirstOrDefault(f => f.Extension == ".html");
+        _rendered = _html is null ? default : new DateTimeOffset(_html.LastWriteTimeUtc, TimeSpan.Zero);
+    }
+
+    private static string Label(FileInfo file) => file.Extension == ".html" ? "open in a new tab" : file.Name;
+}

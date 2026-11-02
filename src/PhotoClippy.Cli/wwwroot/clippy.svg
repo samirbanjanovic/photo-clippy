@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="clippy-title">
+  <title id="clippy-title">Photo Clippy</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFD93D"/>
+      <stop offset=".5" stop-color="#FF8F3F"/>
+      <stop offset="1" stop-color="#FF3D8B"/>
+    </linearGradient>
+    <linearGradient id="wire" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6BFFE6"/>
+      <stop offset="1" stop-color="#3D6BFF"/>
+    </linearGradient>
+    <radialGradient id="iris" cx=".38" cy=".32" r=".85">
+      <stop offset="0" stop-color="#8CFBFF"/>
+      <stop offset="1" stop-color="#2D5BFF"/>
+    </radialGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="tile"><rect width="512" height="512" rx="116"/></clipPath>
+    <path id="spark" d="M0-24C3-9 9-3 24 0C9 3 3 9 0 24C-3 9-9 3-24 0C-9-3-3-9 0-24Z"/>
+    <path id="blades" d="M10 0L5 8.7H-5L-10 0L-5-8.7H5Z"/>
+    <path id="clip" fill="none" stroke-linecap="round" stroke-linejoin="round"
+          d="M-40 55V-55A40 40 0 0 1 40 -55V110A70 70 0 0 1 -100 110V-100A100 100 0 0 1 100 -100V75"/>
+  </defs>
+
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <circle cx="256" cy="270" r="200" fill="none" stroke="#FFFFFF" stroke-opacity=".13" stroke-width="400" stroke-dasharray="52.36 52.36"/>
+    <circle cx="256" cy="262" r="230" fill="url(#glow)"/>
+    <circle cx="256" cy="262" r="214" fill="none" stroke="#FFFFFF" stroke-opacity=".38" stroke-width="12"/>
+    <use href="#spark" transform="translate(92 118) scale(1.25)" fill="#FFFFFF"/>
+    <use href="#spark" transform="translate(424 96) scale(.85)" fill="#FFFFFF"/>
+    <use href="#spark" transform="translate(420 414) scale(.95)" fill="#FFF3A6"/>
+    <use href="#spark" transform="translate(80 402) scale(.55)" fill="#FFFFFF"/>
+    <circle cx="140" cy="62" r="6" fill="#FFFFFF" fill-opacity=".8"/>
+    <circle cx="456" cy="214" r="5" fill="#FFFFFF" fill-opacity=".7"/>
+    <circle cx="52" cy="276" r="5" fill="#FFFFFF" fill-opacity=".7"/>
+
+    <g transform="translate(256 270) rotate(-16) scale(.9)">
+      <use href="#clip" transform="translate(12 14)" stroke="#2A1659" stroke-opacity=".3" stroke-width="34"/>
+      <use href="#clip" stroke="#2A1659" stroke-width="34"/>
+      <use href="#clip" stroke="url(#wire)" stroke-width="24"/>
+      <use href="#clip" transform="translate(-5 -5)" stroke="#FFFFFF" stroke-opacity=".6" stroke-width="5"/>
+
+      <g stroke="#2A1659" stroke-width="7">
+        <ellipse cx="-40" cy="-108" rx="36" ry="40" fill="#FFFFFF"/>
+        <ellipse cx="40" cy="-108" rx="36" ry="40" fill="#FFFFFF"/>
+      </g>
+      <circle cx="-30" cy="-112" r="19" fill="url(#iris)"/>
+      <circle cx="50" cy="-112" r="19" fill="url(#iris)"/>
+      <g fill="#1B0E3A" stroke="#1B0E3A" stroke-width="3" stroke-linejoin="round">
+        <use href="#blades" x="-30" y="-112"/>
+        <use href="#blades" x="50" y="-112"/>
+      </g>
+      <circle cx="-35" cy="-118" r="4.5" fill="#FFFFFF"/>
+      <circle cx="45" cy="-118" r="4.5" fill="#FFFFFF"/>
+      <g fill="none" stroke="#2A1659" stroke-width="11" stroke-linecap="round">
+        <path d="M-72 -156Q-48 -176-14 -164"/>
+        <path d="M16 -168Q48 -178 74 -154"/>
+      </g>
+    </g>
+  </g>
+</svg>

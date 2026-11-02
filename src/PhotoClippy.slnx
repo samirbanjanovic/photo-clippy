@@ -1,0 +1,31 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/PhotoClippy.Auth.Tests/PhotoClippy.Auth.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Cli.Tests/PhotoClippy.Cli.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Clip.Tests/PhotoClippy.Clip.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Color.Tests/PhotoClippy.Color.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Composition.Tests/PhotoClippy.Composition.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Core.Tests/PhotoClippy.Core.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.External.Tests/PhotoClippy.External.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Imaging.Tests/PhotoClippy.Imaging.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Metadata.Tests/PhotoClippy.Metadata.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Recommendation.Tests/PhotoClippy.Recommendation.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Reporting.Tests/PhotoClippy.Reporting.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Testing/PhotoClippy.Testing.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/PhotoClippy.SampleGen/PhotoClippy.SampleGen.csproj" />
+  </Folder>
+  <Project Path="PhotoClippy.Cli/PhotoClippy.Cli.csproj" />
+  <Project Path="PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
+  <Project Path="PhotoClippy.Core/PhotoClippy.Core.csproj" />
+  <Project Path="PhotoClippy.Imaging/PhotoClippy.Imaging.csproj" />
+  <Project Path="PhotoClippy.Plugins.Auth/PhotoClippy.Plugins.Auth.csproj" />
+  <Project Path="PhotoClippy.Plugins.Clip/PhotoClippy.Plugins.Clip.csproj" />
+  <Project Path="PhotoClippy.Plugins.Color/PhotoClippy.Plugins.Color.csproj" />
+  <Project Path="PhotoClippy.Plugins.Composition/PhotoClippy.Plugins.Composition.csproj" />
+  <Project Path="PhotoClippy.Plugins.External/PhotoClippy.Plugins.External.csproj" />
+  <Project Path="PhotoClippy.Plugins.Metadata/PhotoClippy.Plugins.Metadata.csproj" />
+  <Project Path="PhotoClippy.Plugins.Recommendation/PhotoClippy.Plugins.Recommendation.csproj" />
+  <Project Path="PhotoClippy.Plugins.Reporting/PhotoClippy.Plugins.Reporting.csproj" />
+</Solution>

@@ -1,0 +1,56 @@
+@* Horizontal share bars for a profile distribution. *@
+@if (Rows.Count > 0)
+{
+    var max = Rows.Max(r => r.Share);
+    <ol class="bars tone-@Tone">
+        @foreach (var row in Rows)
+        {
+            <li>
+                <span class="bar-label" title="@row.Label">@row.Label</span>
+                <span class="bar-track"><span class="bar-fill" style="width:@Width(row.Share, max)"></span></span>
+                <span class="bar-value">@Fmt.Pct(row.Share)</span>
+            </li>
+        }
+    </ol>
+    @if (Caption is not null)
+    {
+        <p class="caption">@Caption</p>
+    }
+}
+else
+{
+    <p class="muted">Not enough data yet.</p>
+}
+
+@code {
+    private sealed record Row(string Label, double Share);
+
+    [Parameter] public Distribution? Data { get; set; }
+    [Parameter] public int Max { get; set; } = 10;
+    [Parameter] public bool SortByShare { get; set; }
+    [Parameter] public string Tone { get; set; } = "fjord";
+    [Parameter] public string? Caption { get; set; }
+
+    private IReadOnlyList<Row> Rows { get; set; } = [];
+
+    protected override void OnParametersSet()
+    {
+        var bins = Data?.Bins.Where(b => b.Count > 0).ToList() ?? [];
+        var total = bins.Sum(b => b.Count);
+        if (bins.Count == 0 || total <= 0)
+        {
+            Rows = [];
+            return;
+        }
+
+        var useShare = bins.Any(b => b.Share > 0);
+        var rows = bins.Select((b, i) => (Index: i, Row: new Row(b.Label, useShare ? b.Share : b.Count / total))).ToList();
+        var kept = rows.OrderByDescending(r => r.Row.Share).Take(Max);
+        Rows = SortByShare
+            ? [.. kept.Select(r => r.Row)]
+            : [.. kept.OrderBy(r => r.Index).Select(r => r.Row)];
+    }
+
+    private static string Width(double share, double max) =>
+        (max <= 0 ? 0 : share / max * 100).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+}

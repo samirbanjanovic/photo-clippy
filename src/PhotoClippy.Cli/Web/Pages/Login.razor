@@ -1,0 +1,152 @@
+@page "/login"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+@using Microsoft.AspNetCore.Http
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Sign in · Photo Clippy</PageTitle>
+
+@if (_mode is Mode.Redirecting)
+{
+    return;
+}
+
+<section class="auth-card card">
+    <img class="auth-mascot" src="@Assets["clippy.svg"]" alt="" width="88" height="88" />
+    @switch (_mode)
+    {
+        case Mode.SecondFactor:
+            <p class="eyebrow">Second step</p>
+            <h1>Confirm it's you</h1>
+            <p class="lede">@_secondFactor!.Value.Prompt</p>
+            <Messages Flash="_flash" />
+            <form method="post" action="auth/second-factor" class="auth-form">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="@ReturnTo" />
+                <label class="field">
+                    <span class="label">Code</span>
+                    <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required />
+                </label>
+                <button type="submit" class="button primary">Verify</button>
+            </form>
+            <p class="caption">Signing in as <strong>@_secondFactor.Value.User</strong>. <a href="@($"auth/restart?returnUrl={Uri.EscapeDataString(ReturnTo)}")">Use another account</a></p>
+            break;
+
+        case Mode.Setup:
+            <p class="eyebrow">First run</p>
+            <h1>Create the admin account</h1>
+            <p class="lede">No accounts exist yet. Enter the one-time setup code from the server log to claim this installation.</p>
+            <Messages Flash="_flash" />
+            <form method="post" action="auth/setup" class="auth-form">
+                <AntiforgeryToken />
+                <label class="field">
+                    <span class="label">Setup code</span>
+                    <input type="text" name="code" class="mono" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX" autofocus required />
+                    <span class="hint">Run <code>docker logs photo-clippy</code> and look for “setup code”.</span>
+                </label>
+                <label class="field">
+                    <span class="label">User name</span>
+                    <input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="@_flash?.User" required />
+                </label>
+                <label class="field">
+                    <span class="label">Password</span>
+                    <input type="password" name="password" autocomplete="new-password" minlength="@MinPasswordLength" required />
+                    <span class="hint">At least @MinPasswordLength characters.</span>
+                </label>
+                <label class="field">
+                    <span class="label">Repeat password</span>
+                    <input type="password" name="confirm" autocomplete="new-password" required />
+                </label>
+                <button type="submit" class="button primary">Create account and sign in</button>
+            </form>
+            break;
+
+        default:
+            <p class="eyebrow">Photo Clippy</p>
+            <h1>Sign in</h1>
+            <Messages Flash="_flash" />
+            @if (Auth.HasCredentialProviders)
+            {
+                <form method="post" action="auth/login" class="auth-form">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="@ReturnTo" />
+                    <label class="field">
+                        <span class="label">User name</span>
+                        <input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="@_flash?.User" autofocus="@(_flash?.User is null)" required />
+                    </label>
+                    <label class="field">
+                        <span class="label">Password</span>
+                        <input type="password" name="password" autocomplete="current-password" autofocus="@(_flash?.User is not null)" required />
+                    </label>
+                    <button type="submit" class="button primary">Sign in</button>
+                </form>
+            }
+            @if (_redirects.Count > 0)
+            {
+                <div class="auth-alternatives">
+                    @if (Auth.HasCredentialProviders)
+                    {
+                        <p class="caption">or</p>
+                    }
+                    @foreach (var provider in _redirects)
+                    {
+                        <a class="button" href="@($"auth/external/{Uri.EscapeDataString(provider.Id)}?returnUrl={Uri.EscapeDataString(ReturnTo)}")">Continue with @provider.DisplayName</a>
+                    }
+                </div>
+            }
+            @if (!Auth.HasCredentialProviders && _redirects.Count == 0)
+            {
+                <p class="notice">Sign-in is handled in front of this server (@string.Join(", ", Auth.Providers.Select(p => p.DisplayName))). Open the site through that proxy.</p>
+            }
+            break;
+    }
+</section>
+
+@code {
+    private enum Mode { SignIn, SecondFactor, Setup, Redirecting }
+
+    private Mode _mode;
+    private Flash? _flash;
+    private (string User, string Prompt)? _secondFactor;
+    private List<AuthProviderEntry> _redirects = [];
+
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery] private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "reason")] private string? Reason { get; set; }
+
+    private string ReturnTo => AuthWeb.SafeReturnUrl(ReturnUrl);
+
+    private int MinPasswordLength => Auth.DirectoryProvider?.Provider is PhotoClippy.Plugins.Auth.LocalAccountsProvider local ? local.MinPasswordLength : 8;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Auth.SignInDisabled || HttpContext.User.Identity?.IsAuthenticated == true)
+        {
+            _mode = Mode.Redirecting;
+            Nav.NavigateTo(ReturnTo);
+            return;
+        }
+
+        _flash = AuthWeb.TakeFlash(HttpContext);
+        if (_flash is null && Reason == "password")
+        {
+            _flash = new Flash(Notice: "Password changed. Sign in with the new one.");
+        }
+
+        _redirects = [.. Auth.RedirectProviders];
+        _secondFactor = Auth.ReadPendingSecondFactor(HttpContext.Request.Cookies[AuthWeb.SecondFactorCookie]);
+        if (_secondFactor is not null)
+        {
+            _mode = Mode.SecondFactor;
+        }
+        else if (await Auth.NeedsSetupAsync(HttpContext.RequestAborted))
+        {
+            Auth.EnsureSetupCode();
+            _mode = Mode.Setup;
+        }
+    }
+}

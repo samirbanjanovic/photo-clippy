@@ -1,0 +1,34 @@
+@{
+    var pinned = SettingsService.IsPinned(Pins, Path, out var source);
+}
+<div class="@CssClass(pinned)">
+    <span class="label">@Label</span>
+    <fieldset disabled="@pinned">
+        @ChildContent
+    </fieldset>
+    @if (pinned)
+    {
+        <span class="hint pin">Set by the @source, so it can't be changed here.</span>
+    }
+    else if (Hint is not null)
+    {
+        <span class="hint">@Hint</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    /// <summary>Dotted camelCase config path (e.g. "analysis.ioConcurrency") used to detect environment/command-line pins.</summary>
+    [Parameter, EditorRequired] public string Path { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public IReadOnlyDictionary<string, string> Pins { get; set; } = new Dictionary<string, string>();
+
+    [Parameter] public string? Hint { get; set; }
+
+    [Parameter] public bool Wide { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string CssClass(bool pinned) => "field" + (pinned ? " pinned" : null) + (Wide ? " wide" : null);
+}

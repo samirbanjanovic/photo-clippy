@@ -1,0 +1,242 @@
+@page "/"
+@inherits LiveComponent
+@inject AppRuntime Runtime
+@inject ScanScheduler Scheduler
+@inject IHostApplicationLifetime Lifetime
+
+<PageTitle>Overview · Photo Clippy</PageTitle>
+
+@{
+    var state = Coordinator.State;
+    var roots = Runtime.Options.Library.Roots;
+}
+
+<section class="hero">
+    <p class="eyebrow">Your library</p>
+    <h1>@Runtime.Options.Report.Title</h1>
+    <p class="lede">
+        @if (roots.Count == 0)
+        {
+            <span>No photo folders yet. <a href="settings#library">Choose the folders to analyse</a>.</span>
+        }
+        else
+        {
+            <span>Analysing @string.Join(" · ", roots)</span>
+        }
+    </p>
+</section>
+
+<section class="card scan scan-@state.State">
+    <div class="scan-head">
+        <div>
+            <h2>
+                @switch (state.State)
+                {
+                    case "running":
+                        <text>@Fmt.Stage(state.Stage)</text>
+                        break;
+                    case "failed":
+                        <text>The last scan failed</text>
+                        break;
+                    case "completed":
+                        <text>Analysis is up to date</text>
+                        break;
+                    case "cancelled":
+                        <text>The last scan was cancelled</text>
+                        break;
+                    default:
+                        <text>Ready to analyse</text>
+                        break;
+                }
+            </h2>
+            <p class="muted">
+                @if (state.State == "running")
+                {
+                    <span>Started @Fmt.Ago(state.StartedUtc)@(state.Total is > 0 ? $" · {Fmt.N(state.Completed)} of {Fmt.N(state.Total.Value)}" : state.Completed > 0 ? $" · {Fmt.N(state.Completed)} found" : string.Empty)</span>
+                }
+                else if (state.FinishedUtc is not null)
+                {
+                    <span>Finished @Fmt.Ago(state.FinishedUtc)@(state.Captures is { } c ? $" · {Fmt.N(c)} photos in scope" : string.Empty)</span>
+                }
+                else if (_snapshot is not null)
+                {
+                    <span>Last analysis @Fmt.Ago(_snapshot.Run.FinishedUtc)</span>
+                }
+                else
+                {
+                    <span>Nothing analysed yet.</span>
+                }
+                <span class="sep">·</span>
+                @if (Scheduler.NextRunUtc is { } next)
+                {
+                    <span>Next automatic scan @Fmt.Until(next)</span>
+                }
+                else
+                {
+                    <span>Automatic rescans off (<a href="settings#schedule">schedule</a>)</span>
+                }
+            </p>
+        </div>
+        <button class="button primary" disabled="@(state.State == "running" || roots.Count == 0)" @onclick="Scan">
+            @(state.State == "running" ? "Scanning…" : "Scan now")
+        </button>
+    </div>
+    @if (state.State == "running")
+    {
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@ProgressPercent(state)">
+            <span class="@(state.Total is > 0 ? null : "indeterminate")" style="width:@(state.Total is > 0 ? ProgressPercent(state).ToString(CultureInfo.InvariantCulture) + "%" : "30%")"></span>
+        </div>
+    }
+    @if (state.State == "failed" && state.Error is not null)
+    {
+        <p class="notice danger">@state.Error</p>
+    }
+    @if (_message is not null)
+    {
+        <p class="notice">@_message</p>
+    }
+</section>
+
+@if (_loading)
+{
+    <p class="muted">Loading…</p>
+}
+else if (_snapshot is null)
+{
+    <section class="empty">
+        <h2>No analysis yet</h2>
+        <p>Pick your photo folders in <a href="settings#library">Settings</a>, then press <strong>Scan now</strong>. The first pass reads every file's metadata and looks at each frame; later scans only process what changed.</p>
+    </section>
+}
+else
+{
+    var p = _snapshot.Profile;
+    var lib = p.Library;
+    var s = p.Signals;
+    <section class="kpis">
+        <div class="kpi"><span class="kpi-value">@Fmt.N(lib.CapturesInScope)</span><span class="kpi-label">photos analysed</span></div>
+        <div class="kpi"><span class="kpi-value">@p.Bodies.Count</span><span class="kpi-label">@(p.Bodies.Count == 1 ? "camera" : "cameras")</span></div>
+        <div class="kpi"><span class="kpi-value">@p.Lenses.Count</span><span class="kpi-label">@(p.Lenses.Count == 1 ? "lens" : "lenses")</span></div>
+        <div class="kpi"><span class="kpi-value">@Fmt.Focal(s.MedianFocal35)</span><span class="kpi-label">median focal (35mm eq.)</span></div>
+        <div class="kpi"><span class="kpi-value">@Fmt.Aperture(s.MedianFNumber)</span><span class="kpi-label">median aperture</span></div>
+        <div class="kpi"><span class="kpi-value">@Fmt.Iso(s.MedianIso)</span><span class="kpi-label">median ISO</span></div>
+    </section>
+    <p class="caption range">@Fmt.Date(lib.FirstCapture) – @Fmt.Date(lib.LastCapture) · @Fmt.N(lib.FilesSeen) files seen · @Fmt.Bytes(lib.TotalBytes)</p>
+
+    <section class="grid">
+        <article class="card">
+            <h2>Focal length</h2>
+            <p class="subtle">35mm-equivalent, share of frames</p>
+            <Bars Data="@Dist(DistributionIds.Focal35)" Max="12" Tone="fjord" />
+        </article>
+        <article class="card">
+            <h2>Aperture</h2>
+            <p class="subtle">How wide you shoot</p>
+            <Bars Data="@Dist(DistributionIds.Aperture)" Max="10" Tone="moss" />
+        </article>
+        <article class="card">
+            <h2>Subjects</h2>
+            <p class="subtle">What the frames look like (@p.Quality.GenreSource)</p>
+            <Bars Data="@Dist(DistributionIds.Genre)" Max="10" SortByShare="true" Tone="clay" />
+        </article>
+        <article class="card">
+            <h2>Lenses</h2>
+            <p class="subtle">Share of frames per lens</p>
+            <ol class="bars tone-dusk">
+                @foreach (var lens in p.Lenses.Take(8))
+                {
+                    <li>
+                        <span class="bar-label" title="@lens.Display">@lens.Display</span>
+                        <span class="bar-track"><span class="bar-fill" style="width:@Width(lens.Share, p.Lenses[0].Share)"></span></span>
+                        <span class="bar-value">@Fmt.Pct(lens.Share)</span>
+                    </li>
+                }
+            </ol>
+        </article>
+        <article class="card">
+            <h2>ISO</h2>
+            <p class="subtle">Light you work in</p>
+            <Bars Data="@Dist(DistributionIds.Iso)" Max="10" Tone="sand" />
+        </article>
+        <article class="card">
+            <h2>Shutter speed</h2>
+            <p class="subtle">Exposure time</p>
+            <Bars Data="@Dist(DistributionIds.Shutter)" Max="10" Tone="fjord" />
+        </article>
+    </section>
+
+    @if (_snapshot.Insights.Count > 0)
+    {
+        <section class="card">
+            <h2>What stands out</h2>
+            <ul class="insights">
+                @foreach (var insight in _snapshot.Insights.Take(8))
+                {
+                    <li class="tone-@insight.Tone.ToString().ToLowerInvariant()">
+                        @if (insight.Metric is not null)
+                        {
+                            <span class="metric">@insight.Metric</span>
+                        }
+                        <div>
+                            <strong>@insight.Title</strong>
+                            <p>@insight.Text</p>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+
+    <section class="next-steps">
+        <a class="button" href="reports">Open the full report</a>
+        <a class="button ghost" href="lenses">Compare candidate lenses</a>
+    </section>
+}
+
+@code {
+    private AnalysisSnapshot? _snapshot;
+    private bool _loading = true;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _snapshot = await Runtime.Store.LoadLatestSnapshotAsync(Disposing);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private protected override async Task OnServerEventAsync(ServerEvent serverEvent)
+    {
+        if (serverEvent.Type is "scan.completed" or "recommendation.updated")
+        {
+            _message = null;
+            await LoadAsync();
+        }
+    }
+
+    private void Scan()
+    {
+        _message = Coordinator.TryStartScan(Lifetime.ApplicationStopping) ? null : "A scan or ranking is already running.";
+    }
+
+    private Distribution? Dist(string id) => _snapshot?.Profile.Distributions.GetValueOrDefault(id);
+
+    private static double ProgressPercent(ScanState state) =>
+        state.Total is > 0 ? Math.Round(Math.Clamp(state.Completed / (double)state.Total.Value, 0, 1) * 100, 1) : 0;
+
+    private static string Width(double share, double max) =>
+        (max <= 0 ? 0 : share / max * 100).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+}
