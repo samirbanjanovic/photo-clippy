@@ -9,6 +9,9 @@
     <TieredPGO>true</TieredPGO>
     <!-- A CLI first: no appsettings.json, launch profiles or publish-time web.config. -->
     <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <!-- The SDK only infers this when .razor files exist at restore time. deploy/Dockerfile restores from the
+         .csproj files alone, so without it the image ships without _framework/blazor.web.js and the UI stays blank. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>

@@ -28,7 +28,8 @@ COPY src/ src/
 COPY data/ data/
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     dotnet publish src/PhotoClippy.Cli/PhotoClippy.Cli.csproj -c Release -a $TARGETARCH \
-      --no-restore --self-contained false -p:UseAppHost=true -o /app
+      --no-restore --self-contained false -p:UseAppHost=true -o /app \
+ && { test -f /app/wwwroot/_framework/blazor.web.js || { echo "blazor.web.js missing from publish output; the web UI would stay blank" >&2; exit 1; }; }
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
