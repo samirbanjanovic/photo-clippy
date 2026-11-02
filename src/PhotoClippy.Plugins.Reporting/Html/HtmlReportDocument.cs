@@ -314,12 +314,12 @@ internal sealed partial class HtmlReportDocument
     }
 
     /// <summary>Small-multiple figure for a distribution: compact columns plus its data table.</summary>
-    private void SmallMultiple(string cls, Distribution d, string? title = null, Func<Bin, int, bool>? accent = null, Func<string, string>? xLabel = null)
+    private void SmallMultiple(string cls, Distribution d, string? title = null, Func<Bin, int, bool>? accent = null, Func<string, string>? xLabel = null, int? maxValueLabels = null)
     {
         Figure(cls + " sm", title ?? d.Title, SubFor(d), () =>
         {
             var w = cls switch { "c-3" => Charts.WSmall, "c-4" => Charts.W4, "c-6" => Charts.W6, _ => Charts.WSmall };
-            Charts.Columns(_sb, d, w, 112, new ColumnOptions { Compact = true, Accent = accent, XLabel = xLabel, MaxValueLabels = 1 });
+            Charts.Columns(_sb, d, w, 112, new ColumnOptions { Compact = true, Accent = accent, XLabel = xLabel, MaxValueLabels = maxValueLabels ?? 1 });
         }, () => DistTable(d, xLabel));
     }
 

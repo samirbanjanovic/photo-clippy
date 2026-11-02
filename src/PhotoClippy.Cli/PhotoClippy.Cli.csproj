@@ -26,6 +26,7 @@
     <ProjectReference Include="../PhotoClippy.Plugins.Color/PhotoClippy.Plugins.Color.csproj" />
     <ProjectReference Include="../PhotoClippy.Plugins.Composition/PhotoClippy.Plugins.Composition.csproj" />
     <ProjectReference Include="../PhotoClippy.Plugins.Clip/PhotoClippy.Plugins.Clip.csproj" />
+    <ProjectReference Include="../PhotoClippy.Plugins.Lenses/PhotoClippy.Plugins.Lenses.csproj" />
     <ProjectReference Include="../PhotoClippy.Plugins.Recommendation/PhotoClippy.Plugins.Recommendation.csproj" />
     <ProjectReference Include="../PhotoClippy.Plugins.Reporting/PhotoClippy.Plugins.Reporting.csproj" />
     <ProjectReference Include="../PhotoClippy.Plugins.External/PhotoClippy.Plugins.External.csproj" />

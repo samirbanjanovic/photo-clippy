@@ -148,6 +148,10 @@
                                 {
                                     <input type="radio" name="recommender" checked="@selected" @onchange="() => O.Plugins.Recommender = row.Id" />
                                 }
+                                else if (kind == ComponentKind.LensCatalog)
+                                {
+                                    <input type="radio" name="lens-catalog" checked="@selected" @onchange="() => O.Plugins.LensCatalog = row.Id" />
+                                }
                                 else
                                 {
                                     <input type="checkbox" checked="@selected" @onchange="e => Toggle(kind, row.Id, e.Value is true)" />
@@ -392,7 +396,7 @@
 </div>
 
 @code {
-    private static readonly ComponentKind[] Kinds = [ComponentKind.Metadata, ComponentKind.Composition, ComponentKind.Color, ComponentKind.Recommendation];
+    private static readonly ComponentKind[] Kinds = [ComponentKind.Metadata, ComponentKind.Composition, ComponentKind.Color, ComponentKind.Recommendation, ComponentKind.LensCatalog];
 
     private SettingsDraft _draft = default!;
     private string _baseline = string.Empty;
@@ -609,7 +613,12 @@
         return rows;
     }
 
-    private IEnumerable<string> Configured(ComponentKind kind) => kind == ComponentKind.Recommendation ? [O.Plugins.Recommender] : ListFor(kind);
+    private IEnumerable<string> Configured(ComponentKind kind) => kind switch
+    {
+        ComponentKind.Recommendation => [O.Plugins.Recommender],
+        ComponentKind.LensCatalog => string.IsNullOrWhiteSpace(O.Plugins.LensCatalog) ? [] : [O.Plugins.LensCatalog],
+        _ => ListFor(kind),
+    };
 
     private List<string> ListFor(ComponentKind kind) => kind switch
     {
@@ -641,6 +650,7 @@
         ComponentKind.Composition => "Composition: genre and framing",
         ComponentKind.Color => "Colour and light",
         ComponentKind.Recommendation => "Recommender",
+        ComponentKind.LensCatalog => "Lens database: pick candidates by maker",
         _ => kind.ToString(),
     };
 
@@ -650,6 +660,7 @@
         ComponentKind.Composition => "plugins.composition",
         ComponentKind.Color => "plugins.color",
         ComponentKind.Recommendation => "plugins.recommender",
+        ComponentKind.LensCatalog => "plugins.lensCatalog",
         _ => "plugins.reports",
     };
 

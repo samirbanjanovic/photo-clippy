@@ -140,7 +140,7 @@ internal static partial class CliApplication
                 var slate = Ui.Slate.ToMarkup();
                 foreach (var group in rows.GroupBy(r => r.Kind).OrderBy(g => g.Key))
                 {
-                    ui.Heading(group.Key.ToString().ToLowerInvariant());
+                    ui.Heading(System.Text.Json.JsonNamingPolicy.KebabCaseLower.ConvertName(group.Key.ToString()));
                     foreach (var row in group)
                     {
                         var mark = row.Healthy switch
@@ -356,7 +356,7 @@ internal static partial class CliApplication
                     detail += $" · {row.Models.Count} model file(s)";
                 }
 
-                checks.Add(($"{row.Kind.ToString().ToLowerInvariant()}: {row.Id}{(row.Selected ? string.Empty : " (unused)")}", status, detail));
+                checks.Add(($"{System.Text.Json.JsonNamingPolicy.KebabCaseLower.ConvertName(row.Kind.ToString())}: {row.Id}{(row.Selected ? string.Empty : " (unused)")}", status, detail));
             }
 
             foreach (var note in notes)

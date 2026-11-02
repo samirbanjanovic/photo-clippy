@@ -92,6 +92,18 @@ internal sealed class FakeColor(string id = "fake.color") : FakePlugin(id, Compo
         ValueTask.FromResult(new ColorFeatures { MeanLuma = 0.5, Extras = new Dictionary<string, double> { ["meanHue"] = 0.3 } });
 }
 
+internal sealed class FakeLensCatalog(string id = "fake.lenses") : FakePlugin(id, ComponentKind.LensCatalog), ILensCatalog
+{
+    public Task<LensCatalogInfo> GetInfoAsync(CancellationToken cancellationToken = default) => Task.FromResult(new LensCatalogInfo { Available = true, LensCount = 1 });
+
+    public Task<IReadOnlyList<CatalogLens>> SearchAsync(LensCatalogQuery query, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<CatalogLens>>([new CatalogLens { Id = "x/23", Maker = "X", Model = "23mm f/1.4", Mounts = ["X"], FocalMinMm = 23, FocalMaxMm = 23, MaxApertureWide = 1.4, MaxApertureTele = 1.4 }]);
+
+    public Task<LensCatalogInfo> RefreshAsync(CancellationToken cancellationToken = default) => GetInfoAsync(cancellationToken);
+
+    public Task<string?> MountForBodyAsync(string? maker, string? model, CancellationToken cancellationToken = default) => Task.FromResult<string?>("X");
+}
+
 internal sealed class NotAnExtractor(string id = "fake.wrong") : FakePlugin(id, ComponentKind.Metadata);
 
 internal sealed class FakeFrameSource : IFrameSource

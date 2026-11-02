@@ -1,0 +1,34 @@
+<lensdatabase version="2">
+    <camera>
+        <maker>Canon</maker>
+        <model>Canon EOS 5DS</model>
+        <model lang="en">EOS 5DS</model>
+        <mount>Canon EF</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+    <lens>
+        <maker>Canon</maker>
+        <model>Canon EF 16-35mm f/2.8L USM</model>
+        <mount>Canon EF</mount>
+        <cropfactor>1</cropfactor>
+    </lens>
+    <lens>
+        <maker>Canon</maker>
+        <model>Canon EF 70-200mm f/2.8L IS USM + EF 1.4x extender</model>
+        <model lang="en">Canon EF 70-200mm f/2.8L IS USM + EF 1.4× ext.</model>
+        <mount>Canon EF</mount>
+        <cropfactor>1</cropfactor>
+    </lens>
+    <lens>
+        <maker>Canon</maker>
+        <model>Canon Extender EF 2x III</model>
+        <mount>Canon EF</mount>
+        <cropfactor>1</cropfactor>
+    </lens>
+    <lens>
+        <maker>Canon</maker>
+        <model>Canon FDn 50mm 1:1.4</model>
+        <mount>Canon FD</mount>
+        <cropfactor>1</cropfactor>
+    </lens>
+</lensdatabase>

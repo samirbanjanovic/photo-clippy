@@ -104,6 +104,7 @@ internal static partial class CliApplication
             return new FolderBrowser(() => settings.BrowseRoots);
         });
         builder.Services.AddSingleton(new ModelService(runtime, coordinator, runtime.LoggerFactory.CreateLogger<ModelService>()));
+        builder.Services.AddSingleton(_ => new LensCatalogService(runtime, coordinator, runtime.LoggerFactory.CreateLogger<LensCatalogService>()));
 
         await using var app = builder.Build();
         var stopping = app.Lifetime.ApplicationStopping;
@@ -172,6 +173,26 @@ internal static partial class CliApplication
             var (rows, notes) = await PluginInventory.CollectAsync(runtime, health ?? false, ct).ConfigureAwait(false);
             return Json(new { plugins = rows, notes });
         });
+        api.MapGet("/lenses", async (string? q, string? maker, string? mount, string? body, int? limit, LensCatalogService lenses, CancellationToken ct) =>
+        {
+            var catalog = await lenses.GetAsync(ct).ConfigureAwait(false);
+            if (catalog is null)
+            {
+                return Problem(HttpStatusCode.NotFound, lenses.Problem ?? "No lens database.");
+            }
+
+            var info = await catalog.GetInfoAsync(ct).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(mount) && !string.IsNullOrWhiteSpace(body))
+            {
+                mount = await catalog.MountForBodyAsync(null, body, ct).ConfigureAwait(false);
+            }
+
+            var found = await catalog.SearchAsync(new LensCatalogQuery { Text = q, Maker = maker, Mount = mount, Limit = Math.Clamp(limit ?? 50, 1, 500) }, ct).ConfigureAwait(false);
+            return Json(new { info, mount, lenses = found.Select(l => new { l.Id, l.Maker, l.Model, name = l.DisplayName, l.Mounts, l.FocalMinMm, l.FocalMaxMm, l.MaxApertureWide, l.MaxApertureTele, l.Type, shorthand = l.ToShorthand() }) });
+        });
+        api.MapPost("/lenses/update", (LensCatalogService lenses) => lenses.TryStartUpdate(stopping)
+            ? Json(new { updating = true }, StatusCodes.Status202Accepted)
+            : Problem(HttpStatusCode.Conflict, "An update is already running."));
         api.MapGet("/events", (HttpContext context, CancellationToken ct) => StreamEventsAsync(context, coordinator, ct));
 
         var auth = app.Services.GetRequiredService<AuthService>();

@@ -20,6 +20,7 @@ public sealed class PluginSet : IAsyncDisposable
     public List<IColorAnalyzer> Color { get; } = [];
     public IRecommender? Recommender { get; internal set; }
     public List<IReportRenderer> Reports { get; } = [];
+    public ILensCatalog? LensCatalog { get; internal set; }
 
     /// <summary>Composition analyzer id → weight in genre fusion.</summary>
     public Dictionary<string, double> GenreWeights { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -37,6 +38,7 @@ public sealed class PluginSet : IAsyncDisposable
         .. Color.Select(p => p.Manifest),
         .. (Recommender is null ? [] : new[] { Recommender.Manifest }),
         .. Reports.Select(p => p.Manifest),
+        .. (LensCatalog is null ? [] : new[] { LensCatalog.Manifest }),
     ];
 
     internal void Add(IPlugin plugin) => _all.Add(plugin);
@@ -80,7 +82,7 @@ public sealed class PluginHost(PluginCatalog catalog, AppPaths paths, GenreTaxon
 
     /// <summary>
     /// Instantiates the configured plugins of the requested kinds. Missing or unhealthy plugins are skipped with a note;
-    /// declared external plugins are enabled automatically (recommenders only when selected).
+    /// declared external plugins are enabled automatically (recommenders and lens catalogs only when selected).
     /// </summary>
     public async Task<PluginSet> CreateAsync(PluginOptions options, IReadOnlySet<ComponentKind> kinds, bool checkHealth = true, CancellationToken cancellationToken = default)
     {
@@ -132,6 +134,12 @@ public sealed class PluginHost(PluginCatalog catalog, AppPaths paths, GenreTaxon
                 }
             }
 
+            if (kinds.Contains(ComponentKind.LensCatalog) && !string.IsNullOrWhiteSpace(options.LensCatalog))
+            {
+                var resolved = await ResolveAsync<ILensCatalog>(options, [options.LensCatalog], ComponentKind.LensCatalog, externals, set, checkHealth, cancellationToken).ConfigureAwait(false);
+                set.LensCatalog = resolved.FirstOrDefault();
+            }
+
             // Externals that were created but never selected must still be disposed (they may own a child process).
             foreach (var unused in externals.Values)
             {
@@ -170,7 +178,7 @@ public sealed class PluginHost(PluginCatalog catalog, AppPaths paths, GenreTaxon
                 continue;
             }
 
-            if (!kinds.Contains(kind) || (kind == ComponentKind.Recommendation && !string.Equals(options.Recommender, id, StringComparison.OrdinalIgnoreCase)))
+            if (!kinds.Contains(kind) || !IsSelectedSingleton(options, kind, id))
             {
                 continue;
             }
@@ -212,6 +220,16 @@ public sealed class PluginHost(PluginCatalog catalog, AppPaths paths, GenreTaxon
         return result;
     }
 
+    /// <summary>Kinds with exactly one active plugin, chosen by id in the options.</summary>
+    private static bool IsSingleton(ComponentKind kind) => kind is ComponentKind.Recommendation or ComponentKind.LensCatalog;
+
+    private static bool IsSelectedSingleton(PluginOptions options, ComponentKind kind, string id) => kind switch
+    {
+        ComponentKind.Recommendation => string.Equals(options.Recommender, id, StringComparison.OrdinalIgnoreCase),
+        ComponentKind.LensCatalog => string.Equals(options.LensCatalog, id, StringComparison.OrdinalIgnoreCase),
+        _ => true,
+    };
+
     private async Task<List<T>> ResolveAsync<T>(
         PluginOptions options,
         IReadOnlyList<string> ids,
@@ -224,7 +242,7 @@ public sealed class PluginHost(PluginCatalog catalog, AppPaths paths, GenreTaxon
     {
         var resolved = new List<T>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var ordered = ids.Concat(externals.Where(e => e.Value.Manifest.Kind == kind && kind != ComponentKind.Recommendation).Select(e => e.Key)).ToList();
+        var ordered = ids.Concat(externals.Where(e => e.Value.Manifest.Kind == kind && !IsSingleton(kind)).Select(e => e.Key)).ToList();
 
         foreach (var id in ordered)
         {

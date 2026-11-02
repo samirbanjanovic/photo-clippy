@@ -23,7 +23,7 @@ internal static class PluginInventory
     {
         var options = runtime.Options.Plugins;
         var selectedIds = new HashSet<string>(
-            [.. options.Metadata, .. options.Composition, .. options.Color, options.Recommender, .. options.Reports, .. runtime.Options.Auth.Providers],
+            [.. options.Metadata, .. options.Composition, .. options.Color, options.Recommender, options.LensCatalog, .. options.Reports, .. runtime.Options.Auth.Providers],
             StringComparer.OrdinalIgnoreCase);
         var rows = new List<PluginRow>();
         var notes = new List<string>(runtime.Catalog.LoadErrors);

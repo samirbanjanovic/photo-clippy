@@ -11,6 +11,7 @@ spawns it) or **HTTP** (the plugin runs as a service). It implements exactly one
 | `color`       | `color.analyze`                     | `IColorAnalyzer`                     |
 | `recommendation` | `recommend.run`                  | `IRecommender`                       |
 | `report`      | `report.render`                     | `IReportRenderer`                    |
+| `lensCatalog` | `lenses.info`, `lenses.search`, `lenses.refresh` (`lenses.mount` optional) | `ILensCatalog` |
 
 Every plugin also implements `initialize`, should implement `health`, and should honour the
 `shutdown` notification. The reference implementations are
@@ -134,7 +135,7 @@ Params:
 
 | field             | type          | description |
 |-------------------|---------------|-------------|
-| `contractVersion` | string        | host contract version, currently `"1.0"`. Refuse (error) if the major is unknown to you. |
+| `contractVersion` | string        | host contract version, currently `"1.2"`. Refuse (error) if the major is unknown to you. |
 | `kind`            | string        | the kind the host configured this plugin as. |
 | `pluginId`        | string        | the configured plugin id. |
 | `settings`        | object        | the plugin's `settings` object from the host config (`{}` if none). Validate it; reply `-32602` on bad settings. |
@@ -264,7 +265,26 @@ such as `"genre"`, `"focal.eq"`, `"aperture"`, `"iso"`, `"time.hour"` — each `
 — `matrices`, `palette`, `signals`, `quality`), `recommendation` (RecommendationSet or absent),
 `insights[]` (`{section, title, text, metric?, tone}`), `taxonomy`.
 
-### 4.7 `shutdown` (notification)
+### 4.7 `lenses.*` (kind `lensCatalog`)
+
+A lens database the user picks candidates from (`photo-clippy lenses`, the Lenses page,
+`GET /api/v1/lenses`). Only one is active, selected by `plugins.lensCatalog`. The host calls it only
+on user request, never during scans.
+
+| method | params | result |
+|---|---|---|
+| `lenses.info` | none | LensCatalogInfo `{available, lensCount, makers[], mounts[], updatedUtc?, source?, attribution?}`. Return `available: false` until you have data. |
+| `lenses.search` | LensCatalogQuery `{text?, maker?, mount?, limit}` | `{"lenses": [CatalogLens…]}`, best matches first, at most `limit` |
+| `lenses.refresh` | none | LensCatalogInfo after downloading or reloading your data. This is the only call that should touch the network. |
+| `lenses.mount` | `{maker?, model}` | `{"mount": "Fujifilm X"}` or `{"mount": null}`. Optional: reply `-32601` and the host treats every body as unknown. |
+
+CatalogLens: `{id, maker, model, mounts[], focalMinMm, focalMaxMm, maxApertureWide, maxApertureTele,
+type?, weightG?, priceUsd?}`. `model` excludes the maker (the host shows `maker + " " + model`).
+`id` must be stable across refreshes. Weight and price, when you have them, flow into the candidate
+shorthand and enable the portability and value criteria. Mount names are free-form, but matching
+Lensfun's (`"Sony E"`, `"Nikon Z"`, `"Canon RF"`) keeps `--mount` filters portable.
+
+### 4.8 `shutdown` (notification)
 
 No params, no response. Finish or abandon in-flight work and exit promptly (within 2 s). stdin EOF
 means the same thing.

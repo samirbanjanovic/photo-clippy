@@ -155,6 +155,25 @@ def render(params):
     return {"files": [name]}
 
 
+LENSES = [
+    {"id": "mock/23", "maker": "Mock", "model": "23mm f/1.4", "mounts": ["Mock X"],
+     "focalMinMm": 23, "focalMaxMm": 23, "maxApertureWide": 1.4, "maxApertureTele": 1.4},
+    {"id": "mock/16-55", "maker": "Mock", "model": "16-55mm f/2.8", "mounts": ["Mock X", "Mock Y"],
+     "focalMinMm": 16, "focalMaxMm": 55, "maxApertureWide": 2.8, "maxApertureTele": 2.8, "weightG": 655},
+]
+
+
+def lenses_info(params):
+    return {"available": True, "lensCount": len(LENSES), "makers": ["Mock"], "mounts": ["Mock X", "Mock Y"], "source": "mock"}
+
+
+def lenses_search(params):
+    mount = params.get("mount")
+    text = (params.get("text") or "").lower()
+    found = [l for l in LENSES if (not mount or mount in l["mounts"]) and text in l["model"].lower()]
+    return {"lenses": found[: params.get("limit", 50)]}
+
+
 METHODS = {
     "health": health,
     "composition.analyze": lambda p: analyze(p, False),
@@ -162,6 +181,9 @@ METHODS = {
     "metadata.extract": extract,
     "recommend.run": recommend,
     "report.render": render,
+    "lenses.info": lenses_info,
+    "lenses.search": lenses_search,
+    "lenses.refresh": lenses_info,
 }
 
 

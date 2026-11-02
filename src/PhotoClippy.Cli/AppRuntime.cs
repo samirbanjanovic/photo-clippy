@@ -30,6 +30,7 @@ internal sealed class AppRuntime : IDisposable
         "PhotoClippy.Plugins.Recommendation",
         "PhotoClippy.Plugins.Reporting",
         "PhotoClippy.Plugins.Auth",
+        "PhotoClippy.Plugins.Lenses",
     ];
 
     private GenreTaxonomy? _taxonomy;

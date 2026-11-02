@@ -54,3 +54,19 @@ internal sealed record ReportRenderParams
     public required ReportModel Model { get; init; }
     public required RenderTarget Target { get; init; }
 }
+
+internal sealed record LensSearchResult
+{
+    public IReadOnlyList<CatalogLens> Lenses { get; init; } = [];
+}
+
+internal sealed record LensMountParams
+{
+    public string? Maker { get; init; }
+    public string? Model { get; init; }
+}
+
+internal sealed record LensMountResult
+{
+    public string? Mount { get; init; }
+}

@@ -34,17 +34,17 @@ self-hosted service with a web UI. Everything stays on your machine.
 - **Composition and colour.** Subject placement and size, rule of thirds, symmetry, negative
   space, horizon tilt, palette, hue, tonal key, warmth and colourfulness.
 - **Lens recommendation.** A transparent multi-criteria ranking with uncertainty bands, evidence,
-  trade-offs and redundancy against the lenses you already own. No lens database is needed: you
-  type the candidates.
+  trade-offs and redundancy against the lenses you already own. Type the candidates or pick
+  them by maker and model from the open [Lensfun](https://lensfun.github.io/) lens database.
 - **A report worth reading.** A self-contained, offline, print-friendly HTML report in a calm
   Nordic style with light and dark themes, plus JSON and CSV exports.
 - **Web UI and daemon.** Scheduled rescans, live progress, a lens-comparison page, settings, accounts
   and a JSON API. It ships as a Docker image.
-- **Pluggable everything.** Metadata, composition, colour, recommendation, report and sign-in are
+- **Pluggable everything.** Metadata, composition, colour, recommendation, report, lens database and sign-in are
   separate components behind interface contracts. Swap any of them for a .NET assembly or an
   out-of-process plugin in any language (JSON-RPC over stdio or HTTP).
 - **Fast and private.** Results are cached in SQLite, so rescans only read new or changed files. RAW+JPEG
-  pairs count once. There are no network calls except the explicit model download.
+  pairs count once. The only network calls are the explicit model and lens-database downloads.
 
 ## Screenshots
 
@@ -135,6 +135,7 @@ photo-clippy run /tmp/samplelib -c "24/1.4, 35/1.2" --open
 | `plugins` | Built-in, directory and external plugins with version, selection and health. |
 | `users list\|add\|passwd\|admin\|remove` | Web UI accounts (`builtin.auth.local`). See [Sign-in](#sign-in). |
 | `models list\|fetch` | Model files required by plugins. |
+| `lenses update\|search\|info` | Lens database: download it, then find candidates by maker, model, focal length or aperture. See [Lens database](#lens-database). |
 | `doctor` | Installation check. |
 | `config show\|path\|init` | Effective config, where it comes from, starter file. |
 | `cache stats\|clear` | Analysis cache maintenance. |
@@ -167,6 +168,32 @@ Separate entries with commas or semicolons; commas inside quotes are kept. Weigh
 portability criterion and `--max-weight`. Prices enable the value criterion and `--budget`. Either
 is used only when every candidate supplies it.
 
+### Lens database
+
+Instead of typing specs, you can pick candidates from the [Lensfun](https://lensfun.github.io/)
+database (about 1,100 lenses from more than 50 makers, CC BY-SA 3.0). It is downloaded once, on
+request, and kept in `<home>/state/builtin.lenses.lensfun/`:
+
+```bash
+photo-clippy lenses update                     # ~350 KB from GitHub; the only network access
+photo-clippy lenses search 23 f/1.4            # filtered to your camera's mount from the last scan
+photo-clippy lenses search sigma 18-50 --any-mount
+photo-clippy lenses search --maker Viltrox --body "Nikon Z 6"
+```
+
+Search words all have to match: `35` or `35mm` (a prime at that length or a zoom covering it),
+`24-70` (a zoom with about that range), `f/1.4` (that fast or faster), plus any words of the name,
+maker, mount or type (`fisheye`). Each result prints a candidate shorthand such as
+`23/1.4 "Fujifilm XF 23mm f/1.4 R"` to paste into `-c`. On the **Lenses** page, the *Browse lens
+database* card does the same with one click per lens, defaulting to your camera's mount.
+
+Lensfun lists lenses it has calibration data for. That includes most current mirrorless and DSLR
+glass, but the newest releases can be missing, and it has **no weight or price**. Append those
+to a picked line (`… 560g $1100`) to score portability and value. For offline installs, point
+`plugins.settings."builtin.lenses.lensfun".directory` at a folder of Lensfun XML files, such as
+a checkout of `lensfun/data/db`. Set `plugins.lensCatalog` to `""` to turn the feature off, or to
+the id of your own catalog plugin.
+
 ## What is analysed
 
 | component | built-in plugin(s) | signals |
@@ -176,9 +203,12 @@ is used only when every candidate supplies it.
 | Colour | `builtin.color` | luminance percentiles, clipping, contrast and key, colourfulness, saturation, monochrome, warmth/tint, sharpness, hue and luma histograms, palette |
 | Recommendation | `builtin.recommend.mcda` | ranked candidates with criterion breakdown, uncertainty and narrative |
 | Report | `builtin.report.html`, `.json`, `.csv` | renderers |
+| Lens database | `builtin.lenses.lensfun` | lens catalog for picking candidates (see [Lens database](#lens-database)) |
 
 - **Formats:** JPEG, HEIF/HEIC/AVIF, TIFF, PNG, WebP, and RAW via its embedded preview (DNG, NEF,
-  NRW, ARW, CR2, CR3, RAF, ORF, RW2, PEF, SRW, IIQ, 3FR and more). RAW+JPEG pairs (same folder
+  NRW, ARW, CR2, CR3, RAF, ORF, RW2, PEF, SRW, IIQ, 3FR and more). RAWs are not demosaiced, so
+  colour and composition see the camera's rendering, including film simulations and picture
+  styles: a frame shot with a monochrome simulation counts as monochrome. RAW+JPEG pairs (same folder
   and stem) and copies of the same instant count as one capture, so habits aren't inflated.
   Screenshots and document photos are excluded once their genre probability reaches
   `analysis.junkThreshold`.
@@ -223,7 +253,7 @@ step, updates live during scans, and doesn't send anything outside your network.
 |---|---|
 | **Overview** `/` | Library summary, focal/aperture/ISO/subject distributions, insights; scan status with *Scan now* and the next scheduled scan |
 | **Report** `/reports` | The latest full HTML report embedded, plus JSON/CSV downloads |
-| **Lenses** `/lenses` | Type candidates (`24/1.4`, `24-70/2.8 900g $2100`, quick-add chips), pick body/preset/limits, rank without rescanning; *Save as defaults* |
+| **Lenses** `/lenses` | Type candidates (`24/1.4`, `24-70/2.8 900g $2100`, quick-add chips) or browse the lens database by maker, mount and search; pick body/preset/limits, rank without rescanning; *Save as defaults* |
 | **Settings** `/settings` | Library folders (with a folder picker), analysis, components (enable/disable plugins, genre weights, health), recommendation defaults, report, schedule, model download. Admins only |
 | **Account** `/access` | Your session and password; admins also manage accounts here |
 
@@ -239,10 +269,12 @@ for the process lifetime.
 | `GET /healthz` | `{"status":"ok","version":…,"scan":…}` (no sign-in needed) |
 | `GET /api/v1/scan` | Current or last scan state |
 | `POST /api/v1/scan` | Start a scan (`202`; `409` if one is running) |
-| `GET /api/v1/events` | Server-sent events: `scan.state`, `scan.started`, `scan.progress`, `scan.completed`, `scan.failed`, `scan.cancelled`, `recommendation.updated`, `config.applied` |
+| `GET /api/v1/events` | Server-sent events: `scan.state`, `scan.started`, `scan.progress`, `scan.completed`, `scan.failed`, `scan.cancelled`, `recommendation.updated`, `config.applied`, `lenses.updated` |
 | `GET /api/v1/snapshot` | Latest analysis snapshot (profile, insights, ranking) as JSON |
 | `POST /api/v1/recommendations` | Re-rank without rescanning; see the example after this table. Re-renders the report unless `"render": false` |
 | `GET /api/v1/plugins?health=true` | Plugin inventory |
+| `GET /api/v1/lenses?q=&maker=&mount=&body=&limit=` | Search the lens database; `body` resolves a camera to its mount. Each lens includes its candidate `shorthand` |
+| `POST /api/v1/lenses/update` | Download or refresh the lens database (`202`; `409` if one is running; ends with a `lenses.updated` event) |
 
 `POST /api/v1/recommendations` accepts this body:
 
@@ -343,6 +375,7 @@ JSON config file, then defaults. The config file is the first that exists of `--
   "plugins":   { "metadata": ["builtin.metadata.native"],
                  "composition": ["builtin.composition.clip", "builtin.composition.heuristic"],
                  "color": ["builtin.color"], "recommender": "builtin.recommend.mcda",
+                 "lensCatalog": "builtin.lenses.lensfun",   // "" turns the lens database off
                  "reports": ["builtin.report.html", "builtin.report.json", "builtin.report.csv"],
                  // fusion weight of each composition analyzer's genre vote
                  "genreWeights": { "builtin.composition.clip": 1.0, "builtin.composition.heuristic": 0.25 },
@@ -395,6 +428,7 @@ Every component is an interface in `PhotoClippy.Contracts`. All plugins derive f
 | Colour | `IColorAnalyzer` — `Requirements`, `AnalyzeAsync(frame, context)` → `ColorFeatures` |
 | Recommendation | `IRecommender` — `RecommendAsync(RecommendationRequest)` → `RecommendationSet` |
 | Report | `IReportRenderer` — `Format`, `RenderAsync(ReportModel, RenderTarget)` |
+| Lens database | `ILensCatalog` — `GetInfoAsync`, `SearchAsync(LensCatalogQuery)` → `CatalogLens` list, `RefreshAsync`, `MountForBodyAsync(maker, model)` |
 | Auth | `IAuthProvider` plus one sign-in style: `ICredentialAuthProvider`, `IRedirectAuthProvider` or `IRequestAuthProvider`; optionally `IUserDirectory`. See [Sign-in](#sign-in) |
 
 There are three ways to provide one:
@@ -411,8 +445,8 @@ There are three ways to provide one:
    - a composition analyzer
    - a Markdown report renderer
 
-Selection is by id in `plugins.metadata`, `composition`, `color`, `recommender`, `reports` and
-`auth.providers`.
+Selection is by id in `plugins.metadata`, `composition`, `color`, `recommender`, `reports`,
+`lensCatalog` and `auth.providers`.
 Several composition analyzers are fused with configurable weights, and several metadata
 extractors are merged in priority order. Use `photo-clippy plugins` to see what is loaded, what
 is in use and whether it's healthy.
@@ -559,6 +593,7 @@ src/                                   product source only
   PhotoClippy.Plugins.Color/           colour and tonal analytics
   PhotoClippy.Plugins.Recommendation/  MCDA lens ranking
   PhotoClippy.Plugins.Reporting/       HTML, JSON and CSV renderers
+  PhotoClippy.Plugins.Lenses/          Lensfun lens database (download, search, body-to-mount)
   PhotoClippy.Plugins.External/        bridge for out-of-process plugins
   PhotoClippy.Cli/                     `photo-clippy` CLI, `serve` daemon and its Blazor web UI
 data/taxonomy/genres.json              subject taxonomy (20 genres, focal/aperture preferences)

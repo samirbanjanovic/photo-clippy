@@ -56,6 +56,7 @@ internal static partial class CliApplication
         root.Subcommands.Add(BuildServeCommand());
         root.Subcommands.Add(BuildPluginsCommand());
         root.Subcommands.Add(BuildModelsCommand());
+        root.Subcommands.Add(BuildLensesCommand());
         root.Subcommands.Add(BuildDoctorCommand());
         root.Subcommands.Add(BuildConfigCommand());
         root.Subcommands.Add(BuildCacheCommand());

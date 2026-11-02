@@ -5,6 +5,8 @@
 @inject AppRuntime Runtime
 @inject SettingsService Settings
 @inject FolderBrowser Browser
+@inject LensCatalogService Catalog
+@inject IHostApplicationLifetime Lifetime
 
 <PageTitle>Lenses · Photo Clippy</PageTitle>
 
@@ -110,6 +112,81 @@ else
             </div>
         </section>
     </div>
+
+    <section class="card catalog">
+        <div class="card-head">
+            <h2>Browse lens database</h2>
+            @if (_catalogInfo is { Available: true } info)
+            {
+                <span class="muted small">@Fmt.N(info.LensCount) lenses · updated @info.UpdatedUtc?.ToString("yyyy-MM-dd")</span>
+            }
+        </div>
+        @if (_catalogProblem is not null)
+        {
+            <p class="muted">@_catalogProblem</p>
+        }
+        else if (_catalogInfo is { Available: false })
+        {
+            <p class="subtle">Pick candidates by maker and model instead of typing specs. The lens list is downloaded once from the open <a href="https://lensfun.github.io/" target="_blank" rel="noopener">Lensfun</a> database and kept locally.</p>
+            <button type="button" class="button ghost" disabled="@Catalog.Updating" @onclick="UpdateCatalog">@(Catalog.Updating ? "Downloading…" : "Download lens database")</button>
+        }
+        else if (_catalogInfo is not null)
+        {
+            <div class="field-row">
+                <label class="field">
+                    <span class="label">Search</span>
+                    <input type="search" placeholder="e.g. 23 f/1.4, sigma 18-50, xf 16-55" @bind="CatalogText" @bind:event="oninput" />
+                </label>
+                <label class="field">
+                    <span class="label">Maker</span>
+                    <select @bind="CatalogMaker">
+                        <option value="">Any maker</option>
+                        @foreach (var maker in _catalogInfo.Makers)
+                        {
+                            <option value="@maker">@maker</option>
+                        }
+                    </select>
+                </label>
+                <label class="field">
+                    <span class="label">Mount</span>
+                    <select @bind="CatalogMount">
+                        <option value="">Any mount</option>
+                        @foreach (var mount in _catalogInfo.Mounts)
+                        {
+                            <option value="@mount">@mount@(mount == _bodyMount ? " (your camera)" : null)</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            @if (_catalogResults.Count == 0)
+            {
+                <p class="muted">No lenses match.</p>
+            }
+            else
+            {
+                <ul class="owned catalog-results">
+                    @foreach (var lens in _catalogResults)
+                    {
+                        var shorthand = lens.ToShorthand();
+                        var added = Fmt.CandidateEntries(_text).Any(l => string.Equals(l, shorthand, StringComparison.OrdinalIgnoreCase));
+                        <li>
+                            <span>@lens.DisplayName@(lens.Type is not null ? $" · {lens.Type}" : null)<br /><span class="muted small">@string.Join(", ", lens.Mounts)</span></span>
+                            <button type="button" class="chip ghost" disabled="@added" title="@shorthand" @onclick="() => Append(shorthand)">@(added ? "Added" : "+ Add")</button>
+                        </li>
+                    }
+                </ul>
+            }
+            <p class="caption">
+                No weight or price in the database: edit the added line to append e.g. <code>560g $1100</code> to score them.
+                @_catalogInfo.Attribution
+                <button type="button" class="link" disabled="@Catalog.Updating" @onclick="UpdateCatalog">@(Catalog.Updating ? "Updating…" : "Update")</button>
+            </p>
+        }
+        @if (Catalog.LastMessage is { } message)
+        {
+            <p class="@(Catalog.LastFailed ? "notice danger" : "caption")">@message</p>
+        }
+    </section>
 
     <section class="actions">
         <button class="button primary" disabled="@(_busy || _parsed.Count == 0 || _parseErrors.Count > 0)" @onclick="RankAsync">@(_busy ? "Ranking…" : "Rank these lenses")</button>
@@ -234,6 +311,33 @@ else
     private double? _maxWeight;
     private IReadOnlyList<LensSpec> _parsed = [];
     private IReadOnlyList<string> _parseErrors = [];
+    private LensCatalogInfo? _catalogInfo;
+    private string? _catalogProblem;
+    private IReadOnlyList<CatalogLens> _catalogResults = [];
+    private string _catalogText = string.Empty;
+    private string _catalogMaker = string.Empty;
+    private string _catalogMount = string.Empty;
+    private string? _bodyMount;
+    private string? _mountForBody;
+    private CancellationTokenSource? _searchCts;
+
+    private string CatalogText
+    {
+        get => _catalogText;
+        set { _catalogText = value; _ = SearchCatalogAsync(); }
+    }
+
+    private string CatalogMaker
+    {
+        get => _catalogMaker;
+        set { _catalogMaker = value; _ = SearchCatalogAsync(); }
+    }
+
+    private string CatalogMount
+    {
+        get => _catalogMount;
+        set { _catalogMount = value; _ = SearchCatalogAsync(); }
+    }
 
     private string Text
     {
@@ -248,7 +352,11 @@ else
     private string Body
     {
         get => _body ?? string.Empty;
-        set => _body = string.IsNullOrEmpty(value) ? null : value;
+        set
+        {
+            _body = string.IsNullOrEmpty(value) ? null : value;
+            _ = LoadCatalogAsync();
+        }
     }
 
     protected override async Task OnInitializedAsync()
@@ -259,6 +367,74 @@ else
         _budget = options.BudgetUsd;
         _maxWeight = options.MaxWeightG;
         await LoadAsync(initial: true);
+        await LoadCatalogAsync();
+    }
+
+    private async Task LoadCatalogAsync()
+    {
+        try
+        {
+            var catalog = await Catalog.GetAsync(Disposing);
+            _catalogProblem = catalog is null ? Catalog.Problem : null;
+            if (catalog is null)
+            {
+                _catalogInfo = null;
+                return;
+            }
+
+            _catalogInfo = await catalog.GetInfoAsync(Disposing);
+            var bodyDisplay = _snapshot?.Systems.FirstOrDefault(s => s.BodyKey is not null && s.BodyKey == _body)?.BodyDisplay ?? _snapshot?.Profile.Target?.BodyDisplay;
+            _bodyMount = bodyDisplay is null ? null : await catalog.MountForBodyAsync(null, bodyDisplay, Disposing);
+
+            // Follow the camera's mount unless the user picked another one.
+            if (_catalogMount.Length == 0 || _catalogMount == _mountForBody)
+            {
+                _catalogMount = _bodyMount ?? string.Empty;
+            }
+
+            _mountForBody = _bodyMount;
+            await SearchCatalogAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            _catalogProblem = ex.Message;
+        }
+    }
+
+    private async Task SearchCatalogAsync()
+    {
+        _searchCts?.Cancel();
+        var cts = _searchCts = CancellationTokenSource.CreateLinkedTokenSource(Disposing);
+        try
+        {
+            await Task.Delay(120, cts.Token);
+            var catalog = await Catalog.GetAsync(cts.Token);
+            if (catalog is null || _catalogInfo is not { Available: true })
+            {
+                _catalogResults = [];
+                return;
+            }
+
+            _catalogResults = await catalog.SearchAsync(new LensCatalogQuery
+            {
+                Text = _catalogText,
+                Maker = _catalogMaker.Length > 0 ? _catalogMaker : null,
+                Mount = _catalogMount.Length > 0 ? _catalogMount : null,
+                Limit = 30,
+            }, cts.Token);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void UpdateCatalog()
+    {
+        Catalog.TryStartUpdate(Lifetime.ApplicationStopping);
     }
 
     private async Task LoadAsync(bool initial)
@@ -290,6 +466,10 @@ else
         if (serverEvent.Type == "scan.completed" && !_busy)
         {
             await LoadAsync(initial: false);
+        }
+        else if (serverEvent.Type == "lenses.updated")
+        {
+            await LoadCatalogAsync();
         }
     }
 

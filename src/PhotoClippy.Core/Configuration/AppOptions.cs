@@ -57,6 +57,8 @@ public sealed class PluginOptions
     public List<string> Color { get; set; } = ["builtin.color"];
     public string Recommender { get; set; } = "builtin.recommend.mcda";
     public List<string> Reports { get; set; } = ["builtin.report.html", "builtin.report.json", "builtin.report.csv"];
+    /// <summary>Lens database used to pick candidates by maker and model; empty disables it.</summary>
+    public string LensCatalog { get; set; } = "builtin.lenses.lensfun";
     /// <summary>Weight of each composition analyzer in genre fusion (default 1; heuristic priors 0.25).</summary>
     public Dictionary<string, double> GenreWeights { get; set; } = new(StringComparer.OrdinalIgnoreCase)
     {

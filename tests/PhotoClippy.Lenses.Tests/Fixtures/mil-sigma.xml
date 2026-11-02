@@ -1,0 +1,15 @@
+<lensdatabase version="2">
+    <lens>
+        <maker>Sigma</maker>
+        <model>18-50mm F2.8 DC DN | Contemporary 021</model>
+        <mount>Sony E</mount>
+        <mount>Fujifilm X</mount>
+        <cropfactor>1.5</cropfactor>
+    </lens>
+    <lens>
+        <maker>SIGMA</maker>
+        <model>18-50mm F2.8 DC DN | Contemporary 021</model>
+        <mount>Leica L</mount>
+        <cropfactor>1.5</cropfactor>
+    </lens>
+</lensdatabase>

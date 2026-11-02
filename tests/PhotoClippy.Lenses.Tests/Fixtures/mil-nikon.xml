@@ -1,0 +1,16 @@
+<lensdatabase version="2">
+    <camera>
+        <maker>Nikon Corporation</maker>
+        <maker lang="en">Nikon</maker>
+        <model>Nikon Z 6</model>
+        <model lang="en">Z 6</model>
+        <mount>Nikon Z</mount>
+        <cropfactor>1</cropfactor>
+    </camera>
+    <lens>
+        <maker>Nikon</maker>
+        <model>Nikkor Z 24-70mm f/2.8 S</model>
+        <mount>Nikon Z</mount>
+        <cropfactor>1</cropfactor>
+    </lens>
+</lensdatabase>

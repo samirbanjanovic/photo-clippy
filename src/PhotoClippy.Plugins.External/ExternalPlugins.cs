@@ -25,6 +25,7 @@ public static class ExternalPlugins
             ComponentKind.Color => new ExternalColorAnalyzer(connection),
             ComponentKind.Recommendation => new ExternalRecommender(connection),
             ComponentKind.Report => new ExternalReportRenderer(connection),
+            ComponentKind.LensCatalog => new ExternalLensCatalog(connection),
             _ => throw new ArgumentOutOfRangeException(nameof(options), options.Kind, "Unsupported plugin kind."),
         };
     }

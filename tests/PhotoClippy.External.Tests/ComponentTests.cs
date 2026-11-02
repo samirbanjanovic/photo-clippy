@@ -92,6 +92,26 @@ public sealed class ComponentTests
     }
 
     [PythonFact]
+    public async Task LensCatalog_SearchesAndTreatsMountLookupAsOptional()
+    {
+        await using var scope = new TestScope();
+        var catalog = await scope.CreateAsync<ILensCatalog>(TestScope.Mock(ComponentKind.LensCatalog));
+
+        var info = await catalog.GetInfoAsync();
+        Assert.True(info.Available);
+        Assert.Equal(2, info.LensCount);
+        Assert.Equal(2, (await catalog.RefreshAsync()).LensCount);
+
+        var found = await catalog.SearchAsync(new LensCatalogQuery { Text = "16-55", Mount = "Mock Y" });
+        var zoom = Assert.Single(found);
+        Assert.Equal("Mock 16-55mm f/2.8", zoom.DisplayName);
+        Assert.Equal(655, zoom.WeightG);
+        Assert.Empty(await catalog.SearchAsync(new LensCatalogQuery { Text = "23", Mount = "Mock Y" }));
+
+        Assert.Null(await catalog.MountForBodyAsync("Mock", "Body 1"));
+    }
+
+    [PythonFact]
     public async Task ReportRenderer_ResolvesFilesAgainstOutputDirectory()
     {
         await using var scope = new TestScope();

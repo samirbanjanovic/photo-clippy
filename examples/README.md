@@ -15,14 +15,17 @@ Both use only the Python 3.9 standard library.
 ## When components run
 
 `run` scans and renders a habits report; `scan` only analyses. Daemon scans also analyse
-and render without ranking lenses. Owned gear and its usage come from photo metadata,
-not a lens catalog or product lookup.
+and render without ranking lenses. Owned gear and its usage come from photo metadata only.
+The lens catalog (kind `lensCatalog`, `builtin.lenses.lensfun` by default) is never used
+during a scan. It only answers the user's searches when picking candidates, and it only
+downloads on an explicit `lenses update`.
 
 Recommendation plugins run only on an explicit request: `recommend` (prompts for
 candidates on an interactive terminal), recommendation options on `run` or `report`,
 or `POST /api/v1/recommendations` with runtime candidates. Configured candidates are
 optional defaults for those requests, not a trigger for automatic ranking. An explicit
-request with no candidates can suggest generic lens specifications, not catalog products.
+request with no candidates can suggest generic lens specifications, not catalog products;
+catalog lenses become candidates only when the user picks them.
 Saved analysis is reused; no rescan is needed. A plain `report` reuses any saved ranking.
 New scans clear the ranking rather than carry a stale comparison into a fresh report,
 so renderers must support an absent `ReportModel.recommendation`.
@@ -68,7 +71,7 @@ For the http entry, start the service yourself first: `python3 examples/python-c
 | option | default | meaning |
 |--------|---------|---------|
 | `id` | **required** | unique plugin id. The plugin's manifest id must equal it or start with `ext.`. |
-| `kind` | **required** | `metadata`, `composition`, `color`, `recommendation` or `report`. Must match the manifest's kind. |
+| `kind` | **required** | `metadata`, `composition`, `color`, `recommendation`, `report` or `lensCatalog`. Must match the manifest's kind. |
 | `transport` | `"stdio"` | `stdio` (host spawns `command`) or `http` (host POSTs to `url`). |
 | `command` | — | stdio: executable. A bare name is looked up on `PATH`; a relative path with a separator is resolved against `workingDirectory`. |
 | `args` | `[]` | stdio: arguments, passed verbatim (no shell). Relative script paths are resolved by the child against `workingDirectory`. |

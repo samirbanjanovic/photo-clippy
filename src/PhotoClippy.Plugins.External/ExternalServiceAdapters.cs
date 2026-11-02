@@ -58,3 +58,40 @@ internal sealed class ExternalReportRenderer(ExternalPluginConnection connection
         return rendered with { Files = files };
     }
 }
+
+/// <summary><c>lenses.info</c> / <c>lenses.search</c> / <c>lenses.refresh</c> / <c>lenses.mount</c> adapter.</summary>
+internal sealed class ExternalLensCatalog(ExternalPluginConnection connection) : ExternalPluginBase(connection), ILensCatalog
+{
+    public async Task<LensCatalogInfo> GetInfoAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await Connection.CallAsync("lenses.info", null, cancellationToken).ConfigureAwait(false);
+        return Connection.Decode<LensCatalogInfo>(result, "lenses.info");
+    }
+
+    public async Task<IReadOnlyList<CatalogLens>> SearchAsync(LensCatalogQuery query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var result = await Connection.CallAsync("lenses.search", JsonRpc.Params(query), cancellationToken).ConfigureAwait(false);
+        var lenses = Connection.Decode<LensSearchResult>(result, "lenses.search").Lenses ?? [];
+        return [.. lenses.Where(l => l is not null).Take(Math.Max(1, query.Limit))];
+    }
+
+    public async Task<LensCatalogInfo> RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await Connection.CallAsync("lenses.refresh", null, cancellationToken).ConfigureAwait(false);
+        return Connection.Decode<LensCatalogInfo>(result, "lenses.refresh");
+    }
+
+    public async Task<string?> MountForBodyAsync(string? maker, string? model, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await Connection.CallAsync("lenses.mount", JsonRpc.Params(new LensMountParams { Maker = maker, Model = model }), cancellationToken).ConfigureAwait(false);
+            return Connection.Decode<LensMountResult>(result, "lenses.mount").Mount;
+        }
+        catch (ExternalPluginException ex) when (ex.IsRemote && ex.Code == ExternalPluginErrorCodes.MethodNotFound)
+        {
+            return null;
+        }
+    }
+}

@@ -29,12 +29,28 @@ public sealed class PluginHostTests : IDisposable
         Composition = [.. composition ?? []],
         Color = [.. color ?? []],
         Recommender = "",
+        LensCatalog = "",
         Reports = [],
         GenreWeights = new(StringComparer.OrdinalIgnoreCase),
     };
 
     private PluginHost Host(PluginCatalog catalog, ExternalPluginActivator? activator = null) =>
         new(catalog, Paths(_dir.Path), TestData.Taxonomy, null, activator);
+
+    [Fact]
+    public async Task Resolves_the_configured_lens_catalog_only_when_requested()
+    {
+        var catalog = new PluginCatalog().Add(new FakeFactory("fake.lenses", ComponentKind.LensCatalog, _ => new FakeLensCatalog()));
+        var options = Options();
+        options.LensCatalog = "fake.lenses";
+
+        await using var set = await Host(catalog).CreateAsync(options, new HashSet<ComponentKind> { ComponentKind.LensCatalog });
+        Assert.IsType<FakeLensCatalog>(set.LensCatalog);
+        Assert.Contains(set.Manifests, m => m.Id == "fake.lenses");
+
+        await using var scan = await Host(catalog).CreateAsync(options, new HashSet<ComponentKind> { ComponentKind.Metadata });
+        Assert.Null(scan.LensCatalog);
+    }
 
     [Fact]
     public async Task Selects_configured_plugins_and_passes_context()

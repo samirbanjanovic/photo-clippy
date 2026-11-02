@@ -6,7 +6,10 @@ using System.Text.RegularExpressions;
 
 namespace PhotoClippy.Contracts;
 
-/// <summary>Where a lens description came from. There is no lens database: specs are read or supplied lazily.</summary>
+/// <summary>
+/// Where a lens description came from. Analysis never consults a lens database; a catalog pick
+/// (<see cref="ILensCatalog"/>) enters as user shorthand.
+/// </summary>
 public enum LensSpecSource
 {
     /// <summary>EXIF LensSpecification tag of an owned lens.</summary>

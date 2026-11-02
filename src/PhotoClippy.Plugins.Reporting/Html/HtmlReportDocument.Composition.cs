@@ -165,20 +165,22 @@ internal sealed partial class HtmlReportDocument
             }
         });
 
-        var smalls = new (string Id, string Title)[]
+        // Categorical cards label every bar; a single label on the tallest bar under a "Monochrome" title read as
+        // the monochrome share when it was the colour share.
+        var smalls = new (string Id, string Title, bool LabelAll)[]
         {
-            (DistributionIds.ColorKey, "Key"),
-            (DistributionIds.Monochrome, "Monochrome"),
-            (DistributionIds.Warmth, "Warmth"),
-            (DistributionIds.Colorfulness, "Colourfulness"),
+            (DistributionIds.ColorKey, "Key", true),
+            (DistributionIds.Monochrome, "Colour vs monochrome", true),
+            (DistributionIds.Warmth, "Warmth", false),
+            (DistributionIds.Colorfulness, "Colourfulness", false),
         };
         Grid(() =>
         {
-            foreach (var (id, title) in smalls)
+            foreach (var (id, title, labelAll) in smalls)
             {
                 if (D(id) is { } d)
                 {
-                    SmallMultiple("c-3", d, title);
+                    SmallMultiple("c-3", d, title, maxValueLabels: labelAll ? d.Bins.Count : null);
                 }
             }
         });

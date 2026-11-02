@@ -6,7 +6,7 @@ namespace PhotoClippy.Contracts;
 public static class ContractInfo
 {
     /// <summary>Semantic version of the plugin contract. Minor bumps are additive; major bumps break.</summary>
-    public const string Version = "1.1";
+    public const string Version = "1.2";
 }
 
 public enum ComponentKind
@@ -18,6 +18,8 @@ public enum ComponentKind
     Report,
     /// <summary>Sign-in for the web UI (<see cref="IAuthProvider"/>). In-process only.</summary>
     Auth,
+    /// <summary>Searchable lens database for picking candidates (<see cref="ILensCatalog"/>).</summary>
+    LensCatalog,
 }
 
 public sealed record PluginManifest

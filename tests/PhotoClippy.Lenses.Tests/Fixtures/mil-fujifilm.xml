@@ -1,0 +1,37 @@
+<lensdatabase version="2">
+    <camera>
+        <maker>Fujifilm</maker>
+        <model>X-T5</model>
+        <mount>Fujifilm X</mount>
+        <cropfactor>1.53</cropfactor>
+    </camera>
+    <lens>
+        <maker>Fujifilm</maker>
+        <model>XF16-55mmF2.8 R LM WR</model>
+        <model lang="en">XF 16-55mm f/2.8 R LM WR</model>
+        <mount>Fujifilm X</mount>
+        <cropfactor>1.529</cropfactor>
+    </lens>
+    <lens>
+        <maker>Fujifilm</maker>
+        <model>XF23mmF1.4 R</model>
+        <model lang="en">XF 23mm f/1.4 R</model>
+        <mount>Fujifilm X</mount>
+        <cropfactor>1.529</cropfactor>
+    </lens>
+    <lens>
+        <maker>Fujifilm</maker>
+        <model>XF8mmF3.5 R WR</model>
+        <mount>Fujifilm X</mount>
+        <cropfactor>1.53</cropfactor>
+        <type>fisheye</type>
+    </lens>
+    <lens>
+        <maker>Fujifilm</maker>
+        <model>XF Mystery Prime</model>
+        <mount>Fujifilm X</mount>
+        <cropfactor>1.53</cropfactor>
+        <focal value="33"/>
+        <aperture min="1.2" max="16"/>
+    </lens>
+</lensdatabase>

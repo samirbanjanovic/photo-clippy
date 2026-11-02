@@ -135,7 +135,7 @@ main { flex: 1; padding-bottom: 6rem; }
 /* FocusOnNavigate moves focus to the page heading for screen readers; it is not interactive, so no ring. */
 h1:focus { outline: none; }
 
-input[type=text], input[type=password], input[type=number], input[type=date], select, textarea {
+input[type=text], input[type=search], input[type=password], input[type=number], input[type=date], select, textarea {
   font: inherit; font-size: .92rem; color: var(--ink);
   background: var(--bg); border: 1px solid var(--hair); border-radius: var(--radius);
   padding: .55rem .7rem; width: 100%;
@@ -218,6 +218,14 @@ label.chip.on { background: var(--wash); border-color: var(--fjord); }
 /* Lenses */
 .owned { list-style: none; padding: 0; margin: 0 0 1.25rem; }
 .owned li { display: flex; justify-content: space-between; gap: 1rem; padding: .45rem 0; border-bottom: 1px solid var(--hair); font-size: .9rem; }
+.catalog { margin-top: 1.5rem; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.catalog-results { margin: 1.1rem 0 0; max-height: 26rem; overflow-y: auto; }
+.catalog-results li { align-items: center; }
+.catalog-results .chip { flex: none; }
+.chip.ghost:disabled { cursor: default; opacity: .6; }
+button.link { background: none; border: 0; padding: 0; color: var(--fjord); font: inherit; cursor: pointer; text-decoration: underline; }
+button.link:disabled { color: var(--muted); cursor: default; text-decoration: none; }
 .results .headline { font-size: 1.6rem; margin-top: .25rem; }
 .ranking { list-style: none; padding: 0; margin: 1.5rem 0 0; }
 .ranking > li { display: grid; grid-template-columns: 2.5rem 1fr 13rem; gap: 1.25rem; padding: 1.25rem 0; border-top: 1px solid var(--hair); align-items: start; }

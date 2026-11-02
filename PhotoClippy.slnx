@@ -8,6 +8,7 @@
     <Project Path="tests/PhotoClippy.Core.Tests/PhotoClippy.Core.Tests.csproj" />
     <Project Path="tests/PhotoClippy.External.Tests/PhotoClippy.External.Tests.csproj" />
     <Project Path="tests/PhotoClippy.Imaging.Tests/PhotoClippy.Imaging.Tests.csproj" />
+    <Project Path="tests/PhotoClippy.Lenses.Tests/PhotoClippy.Lenses.Tests.csproj" />
     <Project Path="tests/PhotoClippy.Metadata.Tests/PhotoClippy.Metadata.Tests.csproj" />
     <Project Path="tests/PhotoClippy.Recommendation.Tests/PhotoClippy.Recommendation.Tests.csproj" />
     <Project Path="tests/PhotoClippy.Reporting.Tests/PhotoClippy.Reporting.Tests.csproj" />
@@ -26,6 +27,7 @@
     <Project Path="src/PhotoClippy.Plugins.Color/PhotoClippy.Plugins.Color.csproj" />
     <Project Path="src/PhotoClippy.Plugins.Composition/PhotoClippy.Plugins.Composition.csproj" />
     <Project Path="src/PhotoClippy.Plugins.External/PhotoClippy.Plugins.External.csproj" />
+    <Project Path="src/PhotoClippy.Plugins.Lenses/PhotoClippy.Plugins.Lenses.csproj" />
     <Project Path="src/PhotoClippy.Plugins.Metadata/PhotoClippy.Plugins.Metadata.csproj" />
     <Project Path="src/PhotoClippy.Plugins.Recommendation/PhotoClippy.Plugins.Recommendation.csproj" />
     <Project Path="src/PhotoClippy.Plugins.Reporting/PhotoClippy.Plugins.Reporting.csproj" />
