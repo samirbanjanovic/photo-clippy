@@ -34,12 +34,12 @@ public sealed class AuthServiceTests : IDisposable
         var second = new FakeCredentialProvider("test.second", r => AuthResult.Success(User(r.Username)));
         var auth = Create([first, second]);
 
-        var outcome = await auth.SignInAsync(" samir ", "pw", "10.0.0.5", default);
+        var outcome = await auth.SignInAsync(" alice ", "pw", "10.0.0.5", default);
 
         var principal = Assert.IsType<ClaimsPrincipal>(outcome.Principal);
         Assert.Equal(SignInStatus.SignedIn, outcome.Status);
         Assert.Equal("test.second", principal.FindFirstValue(AuthService.ProviderClaim));
-        Assert.Equal("samir", principal.Identity!.Name);
+        Assert.Equal("alice", principal.Identity!.Name);
         Assert.Equal(1, first.Calls);
     }
 
@@ -50,7 +50,7 @@ public sealed class AuthServiceTests : IDisposable
         var second = new FakeCredentialProvider("test.second", r => AuthResult.Success(User(r.Username)));
         var auth = Create([first, second]);
 
-        var outcome = await auth.SignInAsync("samir", "pw", null, default);
+        var outcome = await auth.SignInAsync("alice", "pw", null, default);
 
         Assert.Equal(SignInStatus.Failed, outcome.Status);
         Assert.Equal("Wrong user name or password.", outcome.Message);
@@ -64,7 +64,7 @@ public sealed class AuthServiceTests : IDisposable
         var auth = Create([provider]);
 
         Assert.Equal(SignInStatus.Failed, (await auth.SignInAsync("  ", "pw", null, default)).Status);
-        Assert.Equal(SignInStatus.Failed, (await auth.SignInAsync("samir", null, null, default)).Status);
+        Assert.Equal(SignInStatus.Failed, (await auth.SignInAsync("alice", null, null, default)).Status);
         Assert.Equal(0, provider.Calls);
     }
 
@@ -73,8 +73,8 @@ public sealed class AuthServiceTests : IDisposable
     {
         var broken = new FakeCredentialProvider("test.broken", _ => throw new InvalidOperationException("down"));
 
-        var alone = await Create([broken, new FakeCredentialProvider("test.unknown", _ => AuthResult.NoResult)]).SignInAsync("samir", "pw", null, default);
-        var covered = await Create([broken, new FakeCredentialProvider("test.ok", r => AuthResult.Success(User(r.Username)))]).SignInAsync("samir", "pw", null, default);
+        var alone = await Create([broken, new FakeCredentialProvider("test.unknown", _ => AuthResult.NoResult)]).SignInAsync("alice", "pw", null, default);
+        var covered = await Create([broken, new FakeCredentialProvider("test.ok", r => AuthResult.Success(User(r.Username)))]).SignInAsync("alice", "pw", null, default);
 
         Assert.Contains("unavailable", alone.Message, StringComparison.Ordinal);
         Assert.Equal(SignInStatus.SignedIn, covered.Status);
@@ -84,13 +84,13 @@ public sealed class AuthServiceTests : IDisposable
     public async Task Access_policy_applies_the_allow_list_and_admin_list()
     {
         var provider = new FakeCredentialProvider("test.only", r => AuthResult.Success(User(r.Username)));
-        var auth = Create([provider], new AuthOptions { AllowedUsers = ["samir", "anna"], Admins = [" SAMIR "] });
+        var auth = Create([provider], new AuthOptions { AllowedUsers = ["alice", "anna"], Admins = [" ALICE "] });
 
-        var samir = await auth.SignInAsync("samir", "pw", null, default);
+        var alice = await auth.SignInAsync("alice", "pw", null, default);
         var anna = await auth.SignInAsync("anna", "pw", null, default);
         var eve = await auth.SignInAsync("eve", "pw", null, default);
 
-        Assert.True(samir.Principal!.IsInRole(AuthRoles.Admin));
+        Assert.True(alice.Principal!.IsInRole(AuthRoles.Admin));
         Assert.False(anna.Principal!.IsInRole(AuthRoles.Admin));
         Assert.Equal(SignInStatus.Failed, eve.Status);
         Assert.Contains("not allowed", eve.Message, StringComparison.Ordinal);
@@ -103,12 +103,12 @@ public sealed class AuthServiceTests : IDisposable
         var auth = Create([provider]);
         for (var i = 0; i < 5; i++)
         {
-            await auth.SignInAsync("samir", "wrong", "10.0.0.9", default);
+            await auth.SignInAsync("alice", "wrong", "10.0.0.9", default);
         }
 
-        var blocked = await auth.SignInAsync("Samir", "right", "10.0.0.9", default);
+        var blocked = await auth.SignInAsync("Alice", "right", "10.0.0.9", default);
         _time.Advance(TimeSpan.FromMinutes(16));
-        await auth.SignInAsync("samir", "right", "10.0.0.9", default);
+        await auth.SignInAsync("alice", "right", "10.0.0.9", default);
 
         Assert.StartsWith("Too many attempts. Try again in 15 min", blocked.Message, StringComparison.Ordinal);
         Assert.Equal(6, provider.Calls);
@@ -123,14 +123,14 @@ public sealed class AuthServiceTests : IDisposable
         };
         var auth = Create([provider]);
 
-        var pending = await auth.SignInAsync("samir", "pw", null, default);
+        var pending = await auth.SignInAsync("alice", "pw", null, default);
         var read = auth.ReadPendingSecondFactor(pending.PendingToken);
         var wrong = await auth.VerifySecondFactorAsync(pending.PendingToken, "000000", null, default);
         var forged = await auth.VerifySecondFactorAsync("not-a-token", "123456", null, default);
         var ok = await auth.VerifySecondFactorAsync(pending.PendingToken, " 123456 ", null, default);
 
         Assert.Equal(SignInStatus.SecondFactor, pending.Status);
-        Assert.Equal("samir", read?.User);
+        Assert.Equal("alice", read?.User);
         Assert.Equal("Code from your app", read?.Prompt);
         Assert.Null(auth.ReadPendingSecondFactor(pending.PendingToken + "x"));
         Assert.Equal("That code didn't work.", wrong.Message);
@@ -141,14 +141,14 @@ public sealed class AuthServiceTests : IDisposable
     [Fact]
     public async Task Sessions_pick_up_role_changes_and_end_when_the_stamp_changes()
     {
-        var current = User("samir", "s1");
+        var current = User("alice", "s1");
         var provider = new FakeCredentialProvider("test.only", _ => AuthResult.Success(current)) { Refresh = _ => current };
         var auth = Create([provider]);
-        var principal = (await auth.SignInAsync("samir", "pw", null, default)).Principal!;
+        var principal = (await auth.SignInAsync("alice", "pw", null, default)).Principal!;
 
-        current = User("samir", "s1", AuthRoles.Admin);
+        current = User("alice", "s1", AuthRoles.Admin);
         var promoted = await auth.ValidateAsync(principal, default);
-        current = User("samir", "s2");
+        current = User("alice", "s2");
         var cached = await auth.ValidateAsync(principal, default);
         _time.Advance(TimeSpan.FromSeconds(61));
         var ended = await auth.ValidateAsync(principal, default);
@@ -163,8 +163,8 @@ public sealed class AuthServiceTests : IDisposable
     {
         var provider = new FakeCredentialProvider("test.only", r => AuthResult.Success(User(r.Username))) { Refresh = _ => throw new IOException("down") };
         var auth = Create([provider]);
-        var principal = (await auth.SignInAsync("samir", "pw", null, default)).Principal!;
-        var orphan = auth.CreatePrincipal("test.removed", User("samir"))!;
+        var principal = (await auth.SignInAsync("alice", "pw", null, default)).Principal!;
+        var orphan = auth.CreatePrincipal("test.removed", User("alice"))!;
 
         Assert.Same(principal, await auth.ValidateAsync(principal, default));
         Assert.Null(await auth.ValidateAsync(orphan, default));
@@ -191,9 +191,9 @@ public sealed class AuthServiceTests : IDisposable
         var code = auth.EnsureSetupCode();
         Assert.Equal(code, auth.EnsureSetupCode());
 
-        var wrong = await auth.CompleteSetupAsync("0000-0000-0000", "samir", "first-password", "first-password", null, default);
-        var mismatch = await auth.CompleteSetupAsync(code, "samir", "first-password", "other-password", null, default);
-        var done = await auth.CompleteSetupAsync($" {code.Replace('-', ' ').ToLowerInvariant()} ", "samir", "first-password", "first-password", null, default);
+        var wrong = await auth.CompleteSetupAsync("0000-0000-0000", "alice", "first-password", "first-password", null, default);
+        var mismatch = await auth.CompleteSetupAsync(code, "alice", "first-password", "other-password", null, default);
+        var done = await auth.CompleteSetupAsync($" {code.Replace('-', ' ').ToLowerInvariant()} ", "alice", "first-password", "first-password", null, default);
         var again = await auth.CompleteSetupAsync(code, "eve", "eve-password", "eve-password", null, default);
 
         Assert.Contains("setup code is wrong", wrong.Message, StringComparison.Ordinal);
@@ -208,9 +208,9 @@ public sealed class AuthServiceTests : IDisposable
     public async Task Changing_your_password_needs_the_current_one_and_ends_the_session()
     {
         var local = LocalAccounts();
-        await local.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await local.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
         var auth = Create([local]);
-        var principal = (await auth.SignInAsync("samir", "first-password", null, default)).Principal!;
+        var principal = (await auth.SignInAsync("alice", "first-password", null, default)).Principal!;
 
         Assert.True(auth.IsDirectoryAccount(principal));
         await Assert.ThrowsAsync<UserDirectoryException>(() => auth.ChangeOwnPasswordAsync(principal, "wrong-password", "second-password", "second-password", null, default));
@@ -218,24 +218,24 @@ public sealed class AuthServiceTests : IDisposable
         await auth.ChangeOwnPasswordAsync(principal, "first-password", "second-password", "second-password", null, default);
 
         Assert.Null(await auth.ValidateAsync(principal, default));
-        Assert.Equal(SignInStatus.SignedIn, (await auth.SignInAsync("samir", "second-password", null, default)).Status);
+        Assert.Equal(SignInStatus.SignedIn, (await auth.SignInAsync("alice", "second-password", null, default)).Status);
     }
 
     [Fact]
     public async Task Only_admins_manage_accounts_and_changes_reach_open_sessions()
     {
         var local = LocalAccounts();
-        await local.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await local.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
         await local.CreateUserAsync(new NewDirectoryUser { Name = "anna", Password = "second-password" });
         var auth = Create([local]);
-        var samir = (await auth.SignInAsync("samir", "first-password", null, default)).Principal!;
+        var alice = (await auth.SignInAsync("alice", "first-password", null, default)).Principal!;
         var anna = (await auth.SignInAsync("anna", "second-password", null, default)).Principal!;
         Assert.NotNull(await auth.ValidateAsync(anna, default));
 
         await Assert.ThrowsAsync<UserDirectoryException>(() => auth.CreateUserAsync(anna, new NewDirectoryUser { Name = "eve", Password = "third-password" }, default));
-        await Assert.ThrowsAsync<UserDirectoryException>(() => auth.DeleteUserAsync(anna, "samir", default));
+        await Assert.ThrowsAsync<UserDirectoryException>(() => auth.DeleteUserAsync(anna, "alice", default));
         var annaAccount = (await local.ListUsersAsync()).Single(u => u.Name == "anna");
-        await auth.SetAdminAsync(samir, annaAccount, admin: true, default);
+        await auth.SetAdminAsync(alice, annaAccount, admin: true, default);
 
         Assert.True((await auth.ValidateAsync(anna, default))!.IsInRole(AuthRoles.Admin));
     }
@@ -284,11 +284,11 @@ public sealed class LoginThrottleTests
         var time = new ManualTime();
         var throttle = new LoginThrottle(time, perUser: 2, perAddress: 3, window: TimeSpan.FromMinutes(10));
 
-        throttle.Failed("samir", "10.0.0.1");
+        throttle.Failed("alice", "10.0.0.1");
         time.Advance(TimeSpan.FromMinutes(1));
-        throttle.Failed(" SAMIR ", "10.0.0.1");
+        throttle.Failed(" ALICE ", "10.0.0.1");
 
-        Assert.Equal(TimeSpan.FromMinutes(9), throttle.RetryAfter("samir", "10.0.0.2"));
+        Assert.Equal(TimeSpan.FromMinutes(9), throttle.RetryAfter("alice", "10.0.0.2"));
         Assert.Null(throttle.RetryAfter("anna", "10.0.0.1"));
 
         throttle.Failed("anna", "10.0.0.1");
@@ -297,7 +297,7 @@ public sealed class LoginThrottleTests
         Assert.Null(throttle.RetryAfter("bob", null));
 
         time.Advance(TimeSpan.FromMinutes(9));
-        Assert.Null(throttle.RetryAfter("samir", "10.0.0.2"));
+        Assert.Null(throttle.RetryAfter("alice", "10.0.0.2"));
     }
 
     [Fact]
@@ -305,11 +305,11 @@ public sealed class LoginThrottleTests
     {
         var throttle = new LoginThrottle(new ManualTime(), perUser: 1, perAddress: 1);
 
-        throttle.Failed("samir", "10.0.0.1");
-        throttle.Succeeded("samir");
+        throttle.Failed("alice", "10.0.0.1");
+        throttle.Succeeded("alice");
 
-        Assert.Null(throttle.RetryAfter("samir", null));
-        Assert.NotNull(throttle.RetryAfter("samir", "10.0.0.1"));
+        Assert.Null(throttle.RetryAfter("alice", null));
+        Assert.NotNull(throttle.RetryAfter("alice", "10.0.0.1"));
     }
 }
 

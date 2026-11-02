@@ -20,7 +20,7 @@ public sealed record AuthenticatedUser
     /// <summary>Stable, unique id within the provider (an account id, an OIDC <c>sub</c>). Not shown to people.</summary>
     public required string Subject { get; init; }
 
-    /// <summary>Login name, matched (case-insensitively) against the host's allow-list and admin list, e.g. <c>samir</c> or <c>samir@pve</c>.</summary>
+    /// <summary>Login name, matched (case-insensitively) against the host's allow-list and admin list, e.g. <c>alice</c> or <c>alice@pve</c>.</summary>
     public required string Name { get; init; }
 
     public string? DisplayName { get; init; }

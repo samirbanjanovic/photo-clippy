@@ -1,0 +1,25 @@
+# Optional: publish Photo Clippy through an existing Traefik reverse proxy.
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.traefik.yaml up -d
+#   or set COMPOSE_FILE=docker-compose.yaml:docker-compose.traefik.yaml in .env
+#
+# Requires CLIPPY_HOST and an existing external network that Traefik watches (TRAEFIK_NETWORK).
+# The router uses tls=true, so Traefik serves its default certificate or one matched from its TLS store.
+# To use an ACME resolver instead, add: traefik.http.routers.photo-clippy.tls.certresolver=<resolver>
+
+services:
+  photo-clippy:
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.photo-clippy.rule=Host(`${CLIPPY_HOST:?set CLIPPY_HOST to the host name Traefik should route}`)"
+      - "traefik.http.routers.photo-clippy.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.photo-clippy.tls=true"
+      - "traefik.http.services.photo-clippy.loadbalancer.server.port=8080"
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik}
+    external: true

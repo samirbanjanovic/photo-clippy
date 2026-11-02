@@ -4,53 +4,100 @@
 
 # Photo Clippy
 
+**Find out how you really shoot, then pick your next lens with evidence instead of hunches.**
+
 *"It looks like you shoot everything at 35 mm. Would you like help buying a lens?"*
+
+[Features](#features) · [Quick start](#quick-start) · [Screenshots](#screenshots) · [How lenses are ranked](#how-lenses-are-ranked) · [Self-hosting](#self-hosting-with-docker) · [Plugins](#plugins)
 
 </div>
 
-A cross-platform (.NET 10) command-line tool and optional daemon that reads your photo library and
-shows how you actually shoot: bodies, lenses, focal lengths, apertures, ISO, shutter speeds,
-light, subjects, composition and colour. It then ranks the lenses you are considering buying
-against that record.
+<p align="center">
+  <img src="docs/images/report-hero.png" alt="The report's opening page: library summary with captures, lenses, bodies, median aperture and most-used focal length" width="720">
+</p>
 
-It produces a self-contained, offline HTML report (Nordic, print-friendly, no external
-requests), plus JSON and CSV for your own tooling. Run as a daemon (`serve`, or the Docker image),
-it adds a web UI for your internal network. There you can browse the statistics, read the report,
-rank candidate lenses and change every setting without editing files.
+Photo Clippy reads your photo library, recursively and read-only, and turns the EXIF data and the
+pixels into a picture of your habits: bodies, lenses, focal lengths, apertures, ISO, shutter
+speeds, light, subjects, composition and colour. Then it ranks the lenses you are considering
+buying, such as `24/1.4, 14-24/2.8, 24-70/2.8, 35/1.2, 50/1.2`, against that record and explains
+each verdict.
 
-- **No lens database.** Your gear comes from EXIF/MakerNotes. You supply the lenses to evaluate at
-  run time with a short shorthand such as `24/1.4, 14-24/2.8`.
-- **Five pluggable components** behind interface contracts: metadata, composition, colour,
-  recommendation and report. Each one can be replaced with an in-process .NET plugin or an
-  out-of-process plugin written in any language (JSON-RPC over stdio or HTTP).
-- **Incremental.** Results are cached in SQLite, so a rescan only reads new or changed files.
-- **Local only.** No network access except the explicit `models fetch`. ONNX Runtime telemetry is
-  disabled.
+It runs as a cross-platform command-line tool on Linux, macOS and Windows (.NET 10), or as a small
+self-hosted service with a web UI. Everything stays on your machine.
 
-```
-PhotoClippy.slnx, global.json, Directory.*.props   solution and shared build settings
-src/                                   product source only
-  PhotoClippy.Contracts/               interfaces + records (the plugin API)
-  PhotoClippy.Core/                    discovery, pipeline, cache, profiling, insights, config, plugin host
-  PhotoClippy.Imaging/                 decode (JPEG/HEIF/TIFF/PNG + embedded RAW previews) via SkiaSharp
-  PhotoClippy.Plugins.Metadata/        native (MetadataExtractor) and ExifTool extractors
-  PhotoClippy.Plugins.Composition/     heuristic composition + scene analyzer
-  PhotoClippy.Plugins.Clip/            CLIP ViT-B/32 (ONNX) subject/genre classifier
-  PhotoClippy.Plugins.Color/           colour and tonal analytics
-  PhotoClippy.Plugins.Recommendation/  MCDA lens ranking
-  PhotoClippy.Plugins.Reporting/       HTML, JSON and CSV renderers
-  PhotoClippy.Plugins.External/        bridge for out-of-process plugins
-  PhotoClippy.Cli/                     `photo-clippy` CLI, `serve` daemon and its Blazor web UI (Web/, wwwroot/)
-data/taxonomy/genres.json              subject taxonomy (20 genres, focal/aperture preferences)
-deploy/                                Dockerfile, docker-compose.yaml, publish-image.sh
-examples/                              external plugin examples + wire protocol
-tests/                                 xUnit test projects
-tools/PhotoClippy.SampleGen/           synthetic EXIF library generator
-```
+## Features
+
+- **Shooting statistics.** Distributions of focal length (native and 35 mm-equivalent), aperture,
+  ISO, shutter speed, exposure value, bodies and lenses over time, with "what stands out" insights.
+- **Subject recognition.** An optional local CLIP model (ONNX), fused with heuristics, sorts frames
+  into 20 subject types such as landscape, portrait, street, astro, night and macro.
+- **Composition and colour.** Subject placement and size, rule of thirds, symmetry, negative
+  space, horizon tilt, palette, hue, tonal key, warmth and colourfulness.
+- **Lens recommendation.** A transparent multi-criteria ranking with uncertainty bands, evidence,
+  trade-offs and redundancy against the lenses you already own. No lens database is needed: you
+  type the candidates.
+- **A report worth reading.** A self-contained, offline, print-friendly HTML report in a calm
+  Nordic style with light and dark themes, plus JSON and CSV exports.
+- **Web UI and daemon.** Scheduled rescans, live progress, a lens-comparison page, settings, accounts
+  and a JSON API. It ships as a Docker image.
+- **Pluggable everything.** Metadata, composition, colour, recommendation, report and sign-in are
+  separate components behind interface contracts. Swap any of them for a .NET assembly or an
+  out-of-process plugin in any language (JSON-RPC over stdio or HTTP).
+- **Fast and private.** Results are cached in SQLite, so rescans only read new or changed files. RAW+JPEG
+  pairs count once. There are no network calls except the explicit model download.
+
+## Screenshots
+
+All screenshots use the synthetic demo library from [`tools/PhotoClippy.SampleGen`](tools/PhotoClippy.SampleGen).
+
+**Lens recommendation.** Each candidate gets a score with an uncertainty band, a criterion
+breakdown, the evidence from your own frames and the trade-offs.
+
+<p align="center"><img src="docs/images/report-recommendation.png" alt="Recommendation section of the report: the 24mm f/1.4 ranked first with score, criteria, evidence and trade-offs" width="720"></p>
+
+**Where you actually shoot.** The focal-length histogram on a logarithmic axis, with the lenses
+you own drawn underneath, and how focal length and aperture combine.
+
+<p align="center"><img src="docs/images/report-focal.png" alt="Focal-length histogram with owned lens ranges" width="720"></p>
+<p align="center"><img src="docs/images/report-heatmap.png" alt="Native focal-length histogram and a focal length by aperture heat map" width="720"></p>
+
+**The look of your pictures.** Palette, hue, tone, key and colour temperature.
+
+<p align="center"><img src="docs/images/report-look.png" alt="Look section with palette, hue and tone charts" width="720"></p>
+
+**Web UI.** The overview updates live while a scan runs. The Lenses page re-ranks candidates
+in a second, without rescanning.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/web-overview.png" alt="Web UI overview page with library statistics"></td>
+    <td width="50%"><img src="docs/images/web-lenses.png" alt="Web UI lens ranking with the top pick expanded"></td>
+  </tr>
+</table>
 
 ## Quick start
 
-Requires the .NET 10 SDK on Linux, macOS or Windows.
+### Docker (web UI)
+
+You need Docker with Compose v2. The first build takes a few minutes.
+
+```sh
+git clone https://github.com/samirbanjanovic/photo-clippy.git
+cd photo-clippy/deploy
+cp .env.example .env               # set CLIPPY_LIBRARY to your photo folder
+docker compose up -d --build
+docker compose logs photo-clippy | grep 'setup code'
+```
+
+Open <http://localhost:8080>, enter the setup code and create the first admin account (see
+[Sign-in](#sign-in)). The first scan of the library starts automatically. Under
+**Settings → Models** you can download the optional subject-recognition model, about 330 MB.
+[Self-hosting with Docker](#self-hosting-with-docker) covers volumes, permissions, reverse proxies
+and private registries.
+
+### Command line
+
+You need the [.NET 10 SDK](https://dotnet.microsoft.com/download) on Linux, macOS or Windows.
 
 ```sh
 dotnet publish src/PhotoClippy.Cli -c Release -o ~/.local/photo-clippy
@@ -61,24 +108,18 @@ photo-clippy models fetch           # optional, ~330 MB: CLIP subject recognitio
 photo-clippy run ~/Pictures -c "24/1.4, 14-24/2.8, 24-70/2.8, 35/1.2, 50/1.2" --open
 ```
 
-Without `-c` on an interactive terminal you are asked for candidates. With `--no-prompt`, or when
-not on a terminal, the recommender suggests archetypes (wide prime, standard zoom, and so on) based
-on your gaps. Without the CLIP model the analysis still runs, and subjects come from the heuristic
-analyzer alone.
+`run` scans the folder, ranks the candidates and opens the HTML report. Without `-c` on an
+interactive terminal you are asked for candidates. With `--no-prompt`, or when not on a
+terminal, the recommender suggests archetypes based on your gaps, such as a wide prime or a
+standard zoom. Without the CLIP model the analysis still runs, and subjects come from the
+heuristic analyzer alone.
 
-### Candidate shorthand
+To try it without your own photos, generate the demo library used for the screenshots:
 
+```sh
+dotnet run --project tools/PhotoClippy.SampleGen -- /tmp/samplelib --count 600 --seed 42
+photo-clippy run /tmp/samplelib -c "24/1.4, 35/1.2" --open
 ```
-24/1.4                     prime: focal/f-number
-14-24/2.8                  constant-aperture zoom
-100-400/4.5-5.6            variable aperture (interpolated in log-focal space)
-24-70mm f/2.8              "mm" and "f/" are optional
-35/1.2 1060g $2800 "Z 35mm f/1.2 S"   optional weight (g or kg), price (USD) and display label
-```
-
-Separate entries with commas or semicolons; commas inside quotes are kept. Weights enable the
-portability criterion and `--max-weight`. Prices enable the value criterion and `--budget`. Either
-is used only when every candidate supplies it.
 
 ## Commands
 
@@ -111,6 +152,20 @@ Useful options (see `photo-clippy <command> --help`):
 
 Exit codes: `0` ok, `1` error, `2` usage/config (for example an unparseable lens), `3` no data,
 `4` partial (a renderer, download or plugin failed), `130` cancelled.
+
+### Candidate shorthand
+
+```
+24/1.4                     prime: focal/f-number
+14-24/2.8                  constant-aperture zoom
+100-400/4.5-5.6            variable aperture (interpolated in log-focal space)
+24-70mm f/2.8              "mm" and "f/" are optional
+35/1.2 1060g $2800 "Z 35mm f/1.2 S"   optional weight (g or kg), price (USD) and display label
+```
+
+Separate entries with commas or semicolons; commas inside quotes are kept. Weights enable the
+portability criterion and `--max-weight`. Prices enable the value criterion and `--budget`. Either
+is used only when every candidate supplies it.
 
 ## What is analysed
 
@@ -155,6 +210,124 @@ equally.
   results are deterministic). The report also shows which lens wins under each preset, plus
   strengths, trade-offs and assumptions in plain language.
 
+## Web UI and API
+
+```sh
+photo-clippy serve ~/Pictures --urls http://0.0.0.0:8080
+```
+
+Open `http://<host>:8080`. The UI is Blazor Server, so it works without any client-side build
+step, updates live during scans, and doesn't send anything outside your network.
+
+| page | what it does |
+|---|---|
+| **Overview** `/` | Library summary, focal/aperture/ISO/subject distributions, insights; scan status with *Scan now* and the next scheduled scan |
+| **Report** `/reports` | The latest full HTML report embedded, plus JSON/CSV downloads |
+| **Lenses** `/lenses` | Type candidates (`24/1.4`, `24-70/2.8 900g $2100`, quick-add chips), pick body/preset/limits, rank without rescanning; *Save as defaults* |
+| **Settings** `/settings` | Library folders (with a folder picker), analysis, components (enable/disable plugins, genre weights, health), recommendation defaults, report, schedule, model download. Admins only |
+| **Account** `/access` | Your session and password; admins also manage accounts here |
+
+Folders given to `serve` only seed the library on first start. After that, the folders saved in
+Settings are used. The folder picker can only open folders under `serve.browseRoots`. If that's
+not set, it can open the library roots and your home folder. It never follows symbolic links.
+Any flag passed to `serve` (`-c`, `--rescan-hours`, `--title`, …) locks that setting in the UI
+for the process lifetime.
+
+| endpoint | |
+|---|---|
+| `GET /report/<file>` | Latest rendered report files (HTML, JSON, CSV) |
+| `GET /healthz` | `{"status":"ok","version":…,"scan":…}` (no sign-in needed) |
+| `GET /api/v1/scan` | Current or last scan state |
+| `POST /api/v1/scan` | Start a scan (`202`; `409` if one is running) |
+| `GET /api/v1/events` | Server-sent events: `scan.state`, `scan.started`, `scan.progress`, `scan.completed`, `scan.failed`, `scan.cancelled`, `recommendation.updated`, `config.applied` |
+| `GET /api/v1/snapshot` | Latest analysis snapshot (profile, insights, ranking) as JSON |
+| `POST /api/v1/recommendations` | Re-rank without rescanning; see the example after this table. Re-renders the report unless `"render": false` |
+| `GET /api/v1/plugins?health=true` | Plugin inventory |
+
+`POST /api/v1/recommendations` accepts this body:
+
+```json
+{"candidates":["35/1.2","50/1.2 1090g"],"preset":"low-light","body":null,"budgetUsd":null,"maxWeightG":null,"top":8,"weights":{"fit":0.4}}
+```
+
+Errors return `{"error","hint"}` with `400`, `404`, `409` or `422`. Everything except `/healthz`
+needs a signed-in session: pages and `/report/*` redirect to `/login`, and `/api/v1/*` returns
+`401`. UI session keys are kept in `<home>/keys`.
+
+## Sign-in
+
+Sign-in is pluggable like every other component. `auth.providers` lists auth plugins, which are
+tried in order. A plugin that doesn't know a user passes to the next one, and a plugin that rejects
+the password stops the chain. The host owns sessions, the access policy, throttling and the UI.
+Plugins only answer "who is this?"
+
+| plugin | |
+|---|---|
+| `builtin.auth.local` (default) | Accounts in `<home>/state/builtin.auth.local/users.json` (mode `600`, PBKDF2-SHA256 at 600k iterations). |
+| `builtin.auth.none` | Turns sign-in off. Everyone who can reach the server is an admin. |
+
+There are two roles. **Viewers** can use the Overview, Report and Lenses pages, start scans and
+re-rank. **Admins** can also open Settings, download models and manage accounts.
+
+**First start.** With no accounts, the server logs a one-time setup code:
+
+```sh
+docker logs photo-clippy 2>&1 | grep 'setup code'
+```
+
+Open the UI, then enter the code and the first admin's name and password. Alternatively, create
+the admin from the command line. This also works while the server runs, and changes apply
+within a minute:
+
+```sh
+docker exec -it photo-clippy photo-clippy users add alice --admin            # prompts for the password
+echo "$PW" | docker exec -i photo-clippy photo-clippy users add anna --password-stdin
+docker exec photo-clippy photo-clippy users list
+docker exec -it photo-clippy photo-clippy users passwd anna                   # signs anna out everywhere
+docker exec photo-clippy photo-clippy users admin anna [--revoke]
+docker exec photo-clippy photo-clippy users remove anna
+```
+
+The same actions are available to admins on the **Account** page. You can't remove or demote the
+last admin. If you edit accounts from the CLI and the UI at the same moment, the last write wins.
+
+**Policy (config file or environment only, read at start-up):**
+
+| setting | |
+|---|---|
+| `auth.allowedUsers` | If set, only these names may sign in, whatever the plugin says. Useful with a shared directory such as Proxmox or LDAP. |
+| `auth.admins` | Names that always get the admin role. |
+| `auth.sessionHours` | Sliding session length (default 12). Sessions also end when the password changes or the account is removed. |
+| `auth.trustedProxies` | Proxies whose `X-Forwarded-For`/`-Proto` headers are trusted, for client IPs in the throttle and log. The default is loopback and private ranges, which covers a reverse proxy on the LAN. |
+
+```yaml
+environment:
+  - PHOTO_CLIPPY_AUTH__ADMINS__0=alice
+  - PHOTO_CLIPPY_AUTH__SESSIONHOURS=24
+  # - PHOTO_CLIPPY_AUTH__PROVIDERS__0=builtin.auth.none    # sign-in off (trusted network only)
+```
+
+**Hardening.** Failed sign-ins are throttled: 5 per user name and 20 per address in 15 minutes.
+Forms use antiforgery tokens, and cookies are `HttpOnly`, `SameSite=Lax` and `Secure` over HTTPS.
+Serve it through a TLS-terminating reverse proxy so passwords never cross the network in clear text. Scripts
+calling `/api/v1` need the session cookie, which you get by posting the sign-in form.
+
+**More providers.** Another identity source is just another plugin, loaded like any other
+(in-process assembly or listed by id), so the host and the UI stay unchanged:
+
+- **Proxmox or LDAP:** `ICredentialAuthProvider`, for example checking the password against the
+  Proxmox `pve` realm. Combine it with `auth.allowedUsers` to admit only some users.
+- **OIDC (Authentik, Keycloak, Entra):** `IRedirectAuthProvider`. The sign-in page shows a button
+  for it.
+- **Traefik forward-auth or Authelia:** `IRequestAuthProvider`. It reads identity headers and
+  should trust them only when `IncomingRequest.PeerAddress` is the proxy. The sign-in page is
+  skipped.
+- **Second factor:** any credential plugin can return `AuthResult.NeedSecondFactor`, and the host
+  shows the code prompt.
+
+List several providers to migrate gradually, for example
+`["builtin.auth.local", "my.auth.proxmox"]`. Local accounts keep working while users move.
+
 ## Configuration
 
 Settings resolve in this order: command-line options, then environment variables, then the
@@ -164,7 +337,7 @@ JSON config file, then defaults. The config file is the first that exists of `--
 
 ```jsonc
 {
-  "library":   { "roots": ["/mnt/photos"], "ignore": ["**/exports/**"], "followSymlinks": false },
+  "library":   { "roots": ["/photos"], "ignore": ["**/exports/**"], "followSymlinks": false },
   "analysis":  { "scope": "interchangeable", "frames": true, "cpuConcurrency": 0, "highIsoThreshold": 3200,
                  "recencyHalfLifeYears": 0, "minGenreConfidence": 0.15 },
   "plugins":   { "metadata": ["builtin.metadata.native"],
@@ -181,7 +354,7 @@ JSON config file, then defaults. The config file is the first that exists of `--
   "paths":     { "home": null, "models": null },
   "serve":     { "urls": "http://0.0.0.0:8080", "rescanHours": 0, "runOnStart": true,
                  // folders the web UI's folder picker may open (default: library roots + user home)
-                 "browseRoots": ["/mnt/photos"] },
+                 "browseRoots": ["/photos"] },
   // web UI sign-in; read at start-up only (see "Sign-in")
   "auth":      { "providers": ["builtin.auth.local"], "allowedUsers": [], "admins": [],
                  "sessionHours": 12, "trustedProxies": ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"] }
@@ -244,197 +417,105 @@ Several composition analyzers are fused with configurable weights, and several m
 extractors are merged in priority order. Use `photo-clippy plugins` to see what is loaded, what
 is in use and whether it's healthy.
 
-## Daemon and web UI
+## Self-hosting with Docker
 
-```sh
-photo-clippy serve /mnt/photos --urls http://0.0.0.0:8080
-```
+[deploy/Dockerfile](deploy/Dockerfile) builds a multi-arch (amd64 and arm64) image. It is based
+on `aspnet:10.0`, runs as the non-root `app` user (uid 1654) and includes ExifTool. Inside the
+container:
 
-Open `http://<host>:8080`. The UI is Blazor Server, so it works without any client-side build
-step, updates live during scans, and doesn't send anything outside your network.
-
-| page | what it does |
+| path | purpose |
 |---|---|
-| **Overview** `/` | Library summary, focal/aperture/ISO/subject distributions, insights; scan status with *Scan now* and the next scheduled scan |
-| **Report** `/reports` | The latest full HTML report embedded, plus JSON/CSV downloads |
-| **Lenses** `/lenses` | Type candidates (`24/1.4`, `24-70/2.8 900g $2100`, quick-add chips), pick body/preset/limits, rank without rescanning; *Save as defaults* |
-| **Settings** `/settings` | Library folders (with a folder picker), analysis, components (enable/disable plugins, genre weights, health), recommendation defaults, report, schedule, model download. Admins only |
-| **Account** `/access` | Your session and password; admins also manage accounts here |
+| `/photos` | your library, mounted read-only; the UI's folder picker is confined to it |
+| `/data` | config written by the UI, analysis cache, models, reports, accounts and session keys |
+| port `8080` | web UI and API |
 
-Folders given to `serve` only seed the library on first start. After that, the folders saved in
-Settings are used. The folder picker can only open folders under `serve.browseRoots`. If that's
-not set, it can open the library roots and your home folder. It never follows symbolic links.
-Any flag passed to `serve` (`-c`, `--rescan-hours`, `--title`, …) locks that setting in the UI
-for the process lifetime.
+[deploy/docker-compose.yaml](deploy/docker-compose.yaml) is configured with a `.env` file next to
+it. Copy [deploy/.env.example](deploy/.env.example) and set at least `CLIPPY_LIBRARY`:
 
-| endpoint | |
-|---|---|
-| `GET /report/<file>` | Latest rendered report files (HTML, JSON, CSV) |
-| `GET /healthz` | `{"status":"ok","version":…,"scan":…}` (no sign-in needed) |
-| `GET /api/v1/scan` | Current or last scan state |
-| `POST /api/v1/scan` | Start a scan (`202`; `409` if one is running) |
-| `GET /api/v1/events` | Server-sent events: `scan.state`, `scan.started`, `scan.progress`, `scan.completed`, `scan.failed`, `scan.cancelled`, `recommendation.updated`, `config.applied` |
-| `GET /api/v1/snapshot` | Latest analysis snapshot (profile, insights, ranking) as JSON |
-| `POST /api/v1/recommendations` | Re-rank without rescanning; see the example after this table. Re-renders the report unless `"render": false` |
-| `GET /api/v1/plugins?health=true` | Plugin inventory |
+| variable | default | |
+|---|---|---|
+| `CLIPPY_LIBRARY` | *(required)* | host folder with your photos, mounted at `/photos:ro` |
+| `CLIPPY_DATA` | `photo-clippy-data` volume | named volume or host folder for `/data` |
+| `PUID` / `PGID` | `1654` | user the container runs as; set them to the owner of `CLIPPY_DATA` if it is a host folder |
+| `CLIPPY_PORT` | `8080` | host port |
+| `TZ` | `UTC` | time zone for logs and schedules |
+| `CLIPPY_IMAGE` | `photo-clippy:latest` | image to run; set it to a registry image to skip the local build |
+| `CLIPPY_PULL_POLICY` | `missing` | `always` to pick up a re-pushed `latest` |
 
-`POST /api/v1/recommendations` accepts this body:
-
-```json
-{"candidates":["35/1.2","50/1.2 1090g"],"preset":"low-light","body":null,"budgetUsd":null,"maxWeightG":null,"top":8,"weights":{"fit":0.4}}
-```
-
-Errors return `{"error","hint"}` with `400`, `404`, `409` or `422`. Everything except `/healthz`
-needs a signed-in session: pages and `/report/*` redirect to `/login`, and `/api/v1/*` returns
-`401`. UI session keys are kept in `<home>/keys`.
-
-### Sign-in
-
-Sign-in is pluggable like every other component. `auth.providers` lists auth plugins, which are
-tried in order. A plugin that doesn't know a user passes to the next one, and a plugin that rejects
-the password stops the chain. The host owns sessions, the access policy, throttling and the UI.
-Plugins only answer "who is this?"
-
-| plugin | |
-|---|---|
-| `builtin.auth.local` (default) | Accounts in `<home>/state/builtin.auth.local/users.json` (mode `600`, PBKDF2-SHA256 at 600k iterations). |
-| `builtin.auth.none` | Turns sign-in off. Everyone who can reach the server is an admin. |
-
-There are two roles. **Viewers** can use the Overview, Report and Lenses pages, start scans and
-re-rank. **Admins** can also open Settings, download models and manage accounts.
-
-**First start.** With no accounts, the server logs a one-time setup code:
+If `CLIPPY_DATA` is a host folder, it must be writable by `PUID:PGID`. Otherwise the container
+stops with `Access to the path '/data/...' is denied`:
 
 ```sh
-docker logs photo-clippy 2>&1 | grep 'setup code'
+sudo mkdir -p /srv/photo-clippy && sudo chown 1000:1000 /srv/photo-clippy   # matching PUID=1000 PGID=1000
 ```
 
-Open the UI, then enter the code and the first admin's name and password. Alternatively, create
-the admin from the command line. This also works while the server runs, and changes apply
-within a minute:
+Any `PHOTO_CLIPPY_*` environment variable added to the compose file overrides the config file and
+shows as locked in the UI (see [Configuration](#configuration)). To update, pull or rebuild and
+run `docker compose up -d` again. State in `/data` survives.
+
+### Behind a reverse proxy
+
+The UI is Blazor Server and uses a WebSocket on `/_blazor`, so the proxy must pass `Upgrade`
+headers. Traefik, Caddy and nginx with the usual WebSocket settings all work.
+[deploy/docker-compose.traefik.yaml](deploy/docker-compose.traefik.yaml) adds Traefik labels and
+joins an existing external network:
 
 ```sh
-docker exec -it photo-clippy photo-clippy users add samir --admin            # prompts for the password
-echo "$PW" | docker exec -i photo-clippy photo-clippy users add anna --password-stdin
-docker exec photo-clippy photo-clippy users list
-docker exec -it photo-clippy photo-clippy users passwd anna                   # signs anna out everywhere
-docker exec photo-clippy photo-clippy users admin anna [--revoke]
-docker exec photo-clippy photo-clippy users remove anna
+# .env
+COMPOSE_FILE=docker-compose.yaml:docker-compose.traefik.yaml
+CLIPPY_HOST=photos.example.lan
+TRAEFIK_NETWORK=traefik          # the external network Traefik watches
+TRAEFIK_ENTRYPOINT=websecure
 ```
 
-The same actions are available to admins on the **Account** page. You can't remove or demote the
-last admin. If you edit accounts from the CLI and the UI at the same moment, the last write wins.
+The default `auth.trustedProxies` (loopback and private ranges) lets the app see client addresses
+and the original scheme behind the proxy.
 
-**Policy (config file or environment only, read at start-up):**
+### Publishing to your own registry
 
-| setting | |
-|---|---|
-| `auth.allowedUsers` | If set, only these names may sign in, whatever the plugin says. Useful with a shared directory such as Proxmox or LDAP. |
-| `auth.admins` | Names that always get the admin role. |
-| `auth.sessionHours` | Sliding session length (default 12). Sessions also end when the password changes or the account is removed. |
-| `auth.trustedProxies` | Proxies whose `X-Forwarded-For`/`-Proto` headers are trusted, for client IPs in the throttle and log. The default is loopback and private ranges, which covers Traefik on the LAN. |
-
-```yaml
-environment:
-  - PHOTO_CLIPPY_AUTH__ADMINS__0=samir
-  - PHOTO_CLIPPY_AUTH__SESSIONHOURS=24
-  # - PHOTO_CLIPPY_AUTH__PROVIDERS__0=builtin.auth.none    # sign-in off (trusted network only)
-```
-
-**Hardening.** Failed sign-ins are throttled: 5 per user name and 20 per address in 15 minutes.
-Forms use antiforgery tokens, and cookies are `HttpOnly`, `SameSite=Lax` and `Secure` over HTTPS.
-Serve it through Traefik with TLS so passwords never cross the network in clear text. Scripts
-calling `/api/v1` need the session cookie, which you get by posting the sign-in form.
-
-**More providers.** Another identity source is just another plugin, loaded like any other
-(in-process assembly or listed by id), so the host and the UI stay unchanged:
-
-- **Proxmox or LDAP:** `ICredentialAuthProvider`, for example checking the password against the
-  Proxmox `pve` realm. Combine it with `auth.allowedUsers` to admit only some users.
-- **OIDC (Authentik, Keycloak, Entra):** `IRedirectAuthProvider`. The sign-in page shows a button
-  for it.
-- **Traefik forward-auth or Authelia:** `IRequestAuthProvider`. It reads identity headers and
-  should trust them only when `IncomingRequest.PeerAddress` is the proxy. The sign-in page is
-  skipped.
-- **Second factor:** any credential plugin can return `AuthResult.NeedSecondFactor`, and the host
-  shows the code prompt.
-
-List several providers to migrate gradually, for example
-`["builtin.auth.local", "my.auth.proxmox"]`. Local accounts keep working while users move.
-
-### Docker
-
-[deploy/Dockerfile](deploy/Dockerfile) is multi-stage and multi-arch (amd64 and arm64). It runs
-as non-root on `aspnet:10.0` and includes ExifTool. It sets `PHOTO_CLIPPY_HOME=/data` and
-`PHOTO_CLIPPY_SERVE__BROWSEROOTS__0=/photos`, so the folder picker is confined to the mounted
-libraries. [deploy/docker-compose.yaml](deploy/docker-compose.yaml) does the following:
-
-- mounts the photo libraries read-only under `/photos`
-- keeps state and the UI-edited `photo-clippy.json` in `/data`
-- publishes port `8095`
-- joins `traefik-network` with router labels
-
-Before starting, adjust the photo bind mounts to match your host, create the host data directory
-with write permission for the configured `PUID`/`PGID`, and ensure the external `traefik-network`
-exists. Photo directories remain read-only.
+To build on one machine and run on another, for example a laptop and a home server,
+[deploy/publish-image.sh](deploy/publish-image.sh) builds the image from the repository root,
+smoke-tests it and pushes it. It runs on Linux and macOS.
 
 ```sh
-cd deploy
-docker compose build
-docker compose up -d          # open http://<host>:8095 and sign in with the setup code (see Sign-in)
+deploy/publish-image.sh -r registry.example.lan        # build linux/amd64, smoke test, push 3 tags
+export PHOTO_CLIPPY_REGISTRY=registry.example.lan      # or set it once
+deploy/publish-image.sh --dry-run                      # print the commands only
+deploy/publish-image.sh --no-push                      # build and smoke test locally as photo-clippy:<tag>
+deploy/publish-image.sh -p linux/arm64                 # for an ARM server
 ```
 
-Then download the subject model under Settings → Models, and configure the rest (rescan
-interval, plugins, defaults) in Settings. A `PHOTO_CLIPPY_*`
-variable in the compose file locks the corresponding setting in the UI. Set `PUID`/`PGID` to the
-owner of the data folder (default `1000`), and `PHOTO_CLIPPY_DATA` to override the host data
-path. Adjust the Traefik `Host()` rule for your domain.
-
-#### Publishing to the lab registry
-
-[deploy/publish-image.sh](deploy/publish-image.sh) builds the image from the repository root and
-pushes it to the homelab registry (`docker.home.arpa`, served by Traefik on 443 with no port in the
-image name). It runs from any directory on Linux or macOS.
-
-```sh
-deploy/publish-image.sh                 # build linux/amd64, smoke test (--version), push 3 tags
-deploy/publish-image.sh --dry-run       # print the commands only
-deploy/publish-image.sh --no-push       # build and smoke test locally
-deploy/publish-image.sh -p linux/arm64  # an ARM lab host
-```
-
-| Tag | Meaning |
+| tag | meaning |
 | :--- | :--- |
 | `0.1.0` | `<Version>` from `Directory.Build.props` |
 | `sha-<rev>` | git revision, suffixed `-dirty` when the working tree has uncommitted changes |
 | `latest` | moving tag, omit with `--no-latest`; add your own with `-t <tag>` |
 
-The default platform is `linux/amd64` regardless of the build machine, so an Apple Silicon Mac
-still produces an image an x86-64 lab host can run. Override with `-p`, or set
-`PHOTO_CLIPPY_REGISTRY`, `PHOTO_CLIPPY_IMAGE` and `PHOTO_CLIPPY_PLATFORM`. If the registry requires
-a login, export `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` (read via `--password-stdin`).
+The default platform is `linux/amd64` whatever the build machine, so an Apple-silicon Mac still
+produces an image an x86-64 server can run. If the registry needs a login, export
+`REGISTRY_USERNAME` and `REGISTRY_PASSWORD`. Before building, the script checks that
+`https://<registry>/v2/` answers like a registry; `--skip-preflight` turns this off.
 
-Before building, the script checks that `https://docker.home.arpa/v2/` answers like a registry and
-stops with a reason if it does not. `--skip-preflight` turns that off.
+**Self-signed certificates.** Docker rejects a registry whose certificate it doesn't trust, for
+example Traefik's default certificate, with an `x509` error. Do one of these on the pushing
+machine and on every host that pulls:
 
-The lab registry sits behind Traefik's default self-signed certificate, so Docker refuses it with
-an `x509` certificate error until you tell it otherwise, once, on the machine that pushes and on
-every host that pulls:
+- Trust your CA by putting it at `~/.docker/certs.d/<registry>/ca.crt`, or at
+  `/etc/docker/certs.d/<registry>/ca.crt` on Linux. This needs a certificate issued for the
+  registry's host name.
+- Add `"<registry>"` to `insecure-registries` in the Docker daemon settings (Docker Desktop:
+  Settings → Docker Engine; Linux: `/etc/docker/daemon.json`), then restart Docker.
 
-- **Simplest, works with the default certificate:** add `"docker.home.arpa"` to
-  `insecure-registries` in the Docker daemon settings (Docker Desktop: Settings → Docker Engine;
-  on Linux `/etc/docker/daemon.json`) and restart Docker.
-- **With a real certificate:** have Traefik serve a certificate issued for `docker.home.arpa` by
-  your own CA, then put that CA in `~/.docker/certs.d/docker.home.arpa/ca.crt` (on Linux
-  `/etc/docker/certs.d/docker.home.arpa/ca.crt`). Traefik's default certificate cannot be trusted
-  this way, because it is issued for a `*.traefik.default` name rather than `docker.home.arpa`.
-
-To test the published image in the lab, point the compose file at it on the lab host:
+Then run the pushed image on the server:
 
 ```sh
-cd deploy
-PHOTO_CLIPPY_IMAGE_REF=docker.home.arpa/photo-clippy:latest docker compose pull
-PHOTO_CLIPPY_IMAGE_REF=docker.home.arpa/photo-clippy:latest docker compose up -d --no-build
+# .env on the server, next to docker-compose.yaml
+CLIPPY_IMAGE=registry.example.lan/photo-clippy:latest
+CLIPPY_PULL_POLICY=always
+```
+
+```sh
+docker compose up -d       # pulls the image; the source tree isn't needed on the server
 ```
 
 ## Development
@@ -463,6 +544,30 @@ Performance on an Apple-silicon laptop, 658 synthetic files (≈ 512 captures):
 
 Container throughput depends on the host CPU, model and mounted storage; benchmark it on the
 deployment host.
+
+## Project layout
+
+```
+PhotoClippy.slnx, global.json, Directory.*.props   solution and shared build settings
+src/                                   product source only
+  PhotoClippy.Contracts/               interfaces + records (the plugin API)
+  PhotoClippy.Core/                    discovery, pipeline, cache, profiling, insights, config, plugin host
+  PhotoClippy.Imaging/                 decode (JPEG/HEIF/TIFF/PNG + embedded RAW previews) via SkiaSharp
+  PhotoClippy.Plugins.Metadata/        native (MetadataExtractor) and ExifTool extractors
+  PhotoClippy.Plugins.Composition/     heuristic composition + scene analyzer
+  PhotoClippy.Plugins.Clip/            CLIP ViT-B/32 (ONNX) subject/genre classifier
+  PhotoClippy.Plugins.Color/           colour and tonal analytics
+  PhotoClippy.Plugins.Recommendation/  MCDA lens ranking
+  PhotoClippy.Plugins.Reporting/       HTML, JSON and CSV renderers
+  PhotoClippy.Plugins.External/        bridge for out-of-process plugins
+  PhotoClippy.Cli/                     `photo-clippy` CLI, `serve` daemon and its Blazor web UI
+data/taxonomy/genres.json              subject taxonomy (20 genres, focal/aperture preferences)
+deploy/                                Dockerfile, compose files, .env.example, publish-image.sh
+docs/images/                           README screenshots
+examples/                              external plugin examples + wire protocol
+tests/                                 xUnit test projects
+tools/PhotoClippy.SampleGen/           synthetic EXIF library generator
+```
 
 ## Limitations and roadmap
 

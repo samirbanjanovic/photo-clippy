@@ -27,7 +27,7 @@ public sealed class LocalAccountsProviderTests : IDisposable
     {
         var provider = Create();
 
-        var first = await provider.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        var first = await provider.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
         var second = await provider.CreateUserAsync(new NewDirectoryUser { Name = "anna", Password = "second-password" });
 
         Assert.Contains(AuthRoles.Admin, first.Roles);
@@ -38,15 +38,15 @@ public sealed class LocalAccountsProviderTests : IDisposable
     public async Task Authenticates_known_users_and_defers_unknown_ones()
     {
         var provider = Create();
-        await provider.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password", DisplayName = "Samir" });
+        await provider.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password", DisplayName = "Alice" });
 
-        var ok = await provider.AuthenticateAsync(Credentials("SAMIR", "first-password"));
-        var wrong = await provider.AuthenticateAsync(Credentials("samir", "nope-nope-nope"));
+        var ok = await provider.AuthenticateAsync(Credentials("ALICE", "first-password"));
+        var wrong = await provider.AuthenticateAsync(Credentials("alice", "nope-nope-nope"));
         var unknown = await provider.AuthenticateAsync(Credentials("ghost", "first-password"));
 
         Assert.Equal(AuthStatus.Succeeded, ok.Status);
-        Assert.Equal("samir", ok.User!.Name);
-        Assert.Equal("Samir", ok.User.DisplayName);
+        Assert.Equal("alice", ok.User!.Name);
+        Assert.Equal("Alice", ok.User.DisplayName);
         Assert.NotNull(ok.User.SessionStamp);
         Assert.Equal(AuthStatus.Failed, wrong.Status);
         Assert.Equal(AuthStatus.NoResult, unknown.Status);
@@ -57,7 +57,7 @@ public sealed class LocalAccountsProviderTests : IDisposable
     [InlineData("", "long-enough-pw")]
     [InlineData("-leading-dash", "long-enough-pw")]
     [InlineData("has space", "long-enough-pw")]
-    [InlineData("samir", "short")]
+    [InlineData("alice", "short")]
     [InlineData("password1", "PASSWORD1")]
     public async Task Rejects_invalid_names_and_passwords(string name, string password)
     {
@@ -71,25 +71,25 @@ public sealed class LocalAccountsProviderTests : IDisposable
     public async Task Names_are_unique_regardless_of_case()
     {
         var provider = Create();
-        await provider.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await provider.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
 
-        await Assert.ThrowsAsync<UserDirectoryException>(async () => await provider.CreateUserAsync(new NewDirectoryUser { Name = "Samir", Password = "other-password" }));
+        await Assert.ThrowsAsync<UserDirectoryException>(async () => await provider.CreateUserAsync(new NewDirectoryUser { Name = "Alice", Password = "other-password" }));
     }
 
     [Fact]
     public async Task The_last_admin_cannot_be_demoted_or_deleted()
     {
         var provider = Create();
-        await provider.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await provider.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
         await provider.CreateUserAsync(new NewDirectoryUser { Name = "anna", Password = "second-password" });
 
-        await Assert.ThrowsAsync<UserDirectoryException>(async () => await provider.SetRolesAsync("samir", []));
-        await Assert.ThrowsAsync<UserDirectoryException>(async () => await provider.DeleteUserAsync("samir"));
+        await Assert.ThrowsAsync<UserDirectoryException>(async () => await provider.SetRolesAsync("alice", []));
+        await Assert.ThrowsAsync<UserDirectoryException>(async () => await provider.DeleteUserAsync("alice"));
 
         await provider.SetRolesAsync("anna", [AuthRoles.Admin]);
-        await provider.SetRolesAsync("samir", []);
-        Assert.True(await provider.DeleteUserAsync("samir"));
-        Assert.False(await provider.DeleteUserAsync("samir"));
+        await provider.SetRolesAsync("alice", []);
+        Assert.True(await provider.DeleteUserAsync("alice"));
+        Assert.False(await provider.DeleteUserAsync("alice"));
         Assert.Equal(["anna"], (await provider.ListUsersAsync()).Select(u => u.Name));
     }
 
@@ -97,23 +97,23 @@ public sealed class LocalAccountsProviderTests : IDisposable
     public async Task Changing_a_password_rotates_the_session_stamp()
     {
         var provider = Create();
-        await provider.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
-        var before = (await provider.AuthenticateAsync(Credentials("samir", "first-password"))).User!;
+        await provider.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
+        var before = (await provider.AuthenticateAsync(Credentials("alice", "first-password"))).User!;
 
-        await provider.SetPasswordAsync("samir", "second-password");
+        await provider.SetPasswordAsync("alice", "second-password");
 
         var refreshed = await provider.RefreshAsync(before);
         Assert.NotNull(refreshed);
         Assert.NotEqual(before.SessionStamp, refreshed.SessionStamp);
-        Assert.Equal(AuthStatus.Failed, (await provider.AuthenticateAsync(Credentials("samir", "first-password"))).Status);
-        Assert.Equal(AuthStatus.Succeeded, (await provider.AuthenticateAsync(Credentials("samir", "second-password"))).Status);
+        Assert.Equal(AuthStatus.Failed, (await provider.AuthenticateAsync(Credentials("alice", "first-password"))).Status);
+        Assert.Equal(AuthStatus.Succeeded, (await provider.AuthenticateAsync(Credentials("alice", "second-password"))).Status);
     }
 
     [Fact]
     public async Task Role_changes_keep_the_stamp_but_show_up_on_refresh()
     {
         var provider = Create();
-        await provider.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await provider.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
         await provider.CreateUserAsync(new NewDirectoryUser { Name = "anna", Password = "second-password" });
         var anna = (await provider.AuthenticateAsync(Credentials("anna", "second-password"))).User!;
 
@@ -129,7 +129,7 @@ public sealed class LocalAccountsProviderTests : IDisposable
     {
         var server = Create();
         var cli = Create();
-        await cli.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await cli.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
         await cli.CreateUserAsync(new NewDirectoryUser { Name = "anna", Password = "second-password" });
 
         var anna = (await server.AuthenticateAsync(Credentials("anna", "second-password"))).User!;
@@ -142,20 +142,20 @@ public sealed class LocalAccountsProviderTests : IDisposable
     [Fact]
     public async Task Weak_hashes_are_upgraded_at_sign_in()
     {
-        await Create().CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await Create().CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
         var stronger = Create(iterations: 2_000);
 
-        Assert.Equal(AuthStatus.Succeeded, (await stronger.AuthenticateAsync(Credentials("samir", "first-password"))).Status);
+        Assert.Equal(AuthStatus.Succeeded, (await stronger.AuthenticateAsync(Credentials("alice", "first-password"))).Status);
 
         Assert.Contains("pbkdf2-sha256$2000$", StoredHash(stronger), StringComparison.Ordinal);
-        Assert.Equal(AuthStatus.Succeeded, (await Create().AuthenticateAsync(Credentials("samir", "first-password"))).Status);
+        Assert.Equal(AuthStatus.Succeeded, (await Create().AuthenticateAsync(Credentials("alice", "first-password"))).Status);
     }
 
     [Fact]
     public async Task Stores_only_hashes_in_a_private_file()
     {
         var provider = Create();
-        await provider.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await provider.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
 
         var text = await File.ReadAllTextAsync(provider.FilePath);
         Assert.DoesNotContain("first-password", text, StringComparison.Ordinal);
@@ -174,7 +174,7 @@ public sealed class LocalAccountsProviderTests : IDisposable
         var provider = Create();
         Assert.True((await provider.CheckHealthAsync()).Healthy);
 
-        await provider.CreateUserAsync(new NewDirectoryUser { Name = "samir", Password = "first-password" });
+        await provider.CreateUserAsync(new NewDirectoryUser { Name = "alice", Password = "first-password" });
 
         Assert.StartsWith("1 account", (await provider.CheckHealthAsync()).Message, StringComparison.Ordinal);
     }

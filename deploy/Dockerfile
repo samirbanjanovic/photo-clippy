@@ -2,7 +2,7 @@
 # Build context: the repository root (this file lives in deploy/).
 #   docker build -f deploy/Dockerfile -t photo-clippy .
 # Multi-arch: docker buildx build --platform linux/amd64,linux/arm64 -f deploy/Dockerfile .
-# To build and publish to the homelab registry use deploy/publish-image.sh.
+# To build and push to your own registry use deploy/publish-image.sh.
 
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH

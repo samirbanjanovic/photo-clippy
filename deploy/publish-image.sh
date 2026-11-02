@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Build the Photo Clippy container image and publish it to the homelab registry.
+# Build the Photo Clippy container image and publish it to your own Docker registry.
 #
-#   deploy/publish-image.sh                 build linux/amd64, smoke test, push :<version> :sha-<rev> :latest
+#   deploy/publish-image.sh -r registry.example.lan   build linux/amd64, smoke test, push :<version> :sha-<rev> :latest
+#   PHOTO_CLIPPY_REGISTRY=registry.example.lan deploy/publish-image.sh
 #   deploy/publish-image.sh --dry-run       print every command without running anything
 #   deploy/publish-image.sh --no-push       build and smoke test locally only
 #
@@ -9,7 +10,7 @@
 # Works with the bash 3.2 that ships with macOS.
 set -euo pipefail
 
-REGISTRY="${PHOTO_CLIPPY_REGISTRY:-docker.home.arpa}"
+REGISTRY="${PHOTO_CLIPPY_REGISTRY:-}"
 IMAGE="${PHOTO_CLIPPY_IMAGE:-photo-clippy}"
 PLATFORM="${PHOTO_CLIPPY_PLATFORM:-linux/amd64}"
 PUSH=1
@@ -29,10 +30,10 @@ Builds deploy/Dockerfile and pushes it to the registry as
   <registry>/<image>:latest      unless --no-latest
 
 Options:
-  -r, --registry HOST   registry host            (default: ${REGISTRY}, env PHOTO_CLIPPY_REGISTRY)
+  -r, --registry HOST   registry host, required to push    (env PHOTO_CLIPPY_REGISTRY)
   -i, --image NAME      image name               (default: ${IMAGE}, env PHOTO_CLIPPY_IMAGE)
   -p, --platform ARCH   target platform          (default: ${PLATFORM}, env PHOTO_CLIPPY_PLATFORM)
-                        linux/amd64 for an x86-64 lab host, linux/arm64 for an ARM one.
+                        linux/amd64 for an x86-64 server, linux/arm64 for an ARM one.
   -t, --tag TAG         add an extra tag; repeatable
       --no-latest       do not tag or push :latest
       --no-push         build and smoke test locally, do not contact the registry
@@ -44,12 +45,11 @@ Options:
 Registry login (only if the registry requires it): set REGISTRY_USERNAME and
 REGISTRY_PASSWORD; the password is passed on stdin, never on the command line.
 
-TLS: the lab registry sits behind Traefik's self-signed default certificate, which Docker
-rejects. Add "<registry>" to "insecure-registries" in the Docker daemon settings (Docker
-Desktop: Settings > Docker Engine) and restart Docker, on this machine and on every host
-that pulls. Once Traefik serves a certificate issued for <registry> by your own CA, trust
-that CA at ~/.docker/certs.d/<registry>/ca.crt instead. See the README "Publishing to the
-lab registry" section.
+TLS: a registry behind a self-signed certificate (for example Traefik's default one) is
+rejected by Docker. Either trust your CA at ~/.docker/certs.d/<registry>/ca.crt (Linux:
+/etc/docker/certs.d/<registry>/ca.crt), or list "<registry>" under "insecure-registries" in the
+Docker daemon settings and restart Docker, on this machine and on every host that pulls.
+See the README "Publishing to your own registry" section.
 EOF
 }
 
@@ -80,7 +80,10 @@ DOCKERFILE="${ROOT}/deploy/Dockerfile"
 
 # Strip a scheme or trailing slash so --registry https://host/ still works.
 REGISTRY="${REGISTRY#http://}"; REGISTRY="${REGISTRY#https://}"; REGISTRY="${REGISTRY%/}"
-[ -n "${REGISTRY}" ] || die "registry must not be empty"
+if [ "${PUSH}" = 1 ] && [ -z "${REGISTRY}" ]; then
+  usage >&2
+  die "no registry: pass --registry HOST or set PHOTO_CLIPPY_REGISTRY (or use --no-push for a local build)"
+fi
 
 case "${PLATFORM}" in
   *,*) die "pass a single platform such as linux/amd64 or linux/arm64; multi-platform images are not supported" ;;
@@ -97,7 +100,7 @@ if git -C "${ROOT}" rev-parse --short=12 HEAD >/dev/null 2>&1; then
   fi
 fi
 
-REPO="${REGISTRY}/${IMAGE}"
+REPO="${REGISTRY:+${REGISTRY}/}${IMAGE}"
 TAGS=("${VERSION}" "sha-${REVISION}")
 [ "${LATEST}" = 1 ] && TAGS+=("latest")
 if [ ${#EXTRA_TAGS[@]} -gt 0 ]; then
@@ -184,7 +187,7 @@ if [ "${DRY_RUN}" = 1 ]; then
   info "dry run complete"
 elif [ "${PUSH}" = 1 ]; then
   info "published ${REPO}: ${TAGS[*]}"
-  echo "    pull on the lab host:  docker pull ${PRIMARY}"
+  echo "    pull it on the server:  docker pull ${PRIMARY}"
 else
   info "built ${REPO}: ${TAGS[*]} (not pushed)"
 fi

@@ -23,3 +23,6 @@ __pycache__/
 *.suo
 .DS_Store
 Thumbs.db
+
+# Local deployment settings
+deploy/.env
