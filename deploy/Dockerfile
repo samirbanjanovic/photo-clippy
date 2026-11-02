@@ -17,6 +17,7 @@ COPY src/PhotoClippy.Plugins.Clip/*.csproj src/PhotoClippy.Plugins.Clip/
 COPY src/PhotoClippy.Plugins.Color/*.csproj src/PhotoClippy.Plugins.Color/
 COPY src/PhotoClippy.Plugins.Composition/*.csproj src/PhotoClippy.Plugins.Composition/
 COPY src/PhotoClippy.Plugins.External/*.csproj src/PhotoClippy.Plugins.External/
+COPY src/PhotoClippy.Plugins.Lenses/*.csproj src/PhotoClippy.Plugins.Lenses/
 COPY src/PhotoClippy.Plugins.Metadata/*.csproj src/PhotoClippy.Plugins.Metadata/
 COPY src/PhotoClippy.Plugins.Recommendation/*.csproj src/PhotoClippy.Plugins.Recommendation/
 COPY src/PhotoClippy.Plugins.Reporting/*.csproj src/PhotoClippy.Plugins.Reporting/
