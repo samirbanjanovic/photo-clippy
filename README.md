@@ -401,7 +401,6 @@ deploy/publish-image.sh                 # build linux/amd64, smoke test (--versi
 deploy/publish-image.sh --dry-run       # print the commands only
 deploy/publish-image.sh --no-push       # build and smoke test locally
 deploy/publish-image.sh -p linux/arm64  # an ARM lab host
-deploy/publish-image.sh -p linux/amd64,linux/arm64   # multi-arch, pushed straight from buildx
 ```
 
 | Tag | Meaning |
@@ -418,14 +417,17 @@ a login, export `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` (read via `--passwor
 Before building, the script checks that `https://docker.home.arpa/v2/` answers like a registry and
 stops with a reason if it does not. `--skip-preflight` turns that off.
 
-The lab registry sits behind Traefik's default self-signed certificate, so Docker refuses it
-(`x509: certificate signed by unknown authority`) until you tell it to trust the host, once, on
-the machine that pushes and on every host that pulls:
+The lab registry sits behind Traefik's default self-signed certificate, so Docker refuses it with
+an `x509` certificate error until you tell it otherwise, once, on the machine that pushes and on
+every host that pulls:
 
-- put the CA or certificate in `~/.docker/certs.d/docker.home.arpa/ca.crt` (on Linux
-  `/etc/docker/certs.d/docker.home.arpa/ca.crt`), or
-- add `"docker.home.arpa"` to `insecure-registries` in the Docker daemon settings (Docker Desktop:
-  Settings → Docker Engine) and restart Docker.
+- **Simplest, works with the default certificate:** add `"docker.home.arpa"` to
+  `insecure-registries` in the Docker daemon settings (Docker Desktop: Settings → Docker Engine;
+  on Linux `/etc/docker/daemon.json`) and restart Docker.
+- **With a real certificate:** have Traefik serve a certificate issued for `docker.home.arpa` by
+  your own CA, then put that CA in `~/.docker/certs.d/docker.home.arpa/ca.crt` (on Linux
+  `/etc/docker/certs.d/docker.home.arpa/ca.crt`). Traefik's default certificate cannot be trusted
+  this way, because it is issued for a `*.traefik.default` name rather than `docker.home.arpa`.
 
 To test the published image in the lab, point the compose file at it on the lab host:
 
@@ -441,7 +443,7 @@ PHOTO_CLIPPY_IMAGE_REF=docker.home.arpa/photo-clippy:latest docker compose up -d
 dotnet build PhotoClippy.slnx
 dotnet test PhotoClippy.slnx --no-build --maxcpucount:1 -- xUnit.ParallelizeTestCollections=false
 dotnet run --project tools/PhotoClippy.SampleGen -- /tmp/samplelib --count 600 --seed 42
-dotnet run --project src/PhotoClippy.Cli -- run /tmp/samplelib -c "24/1.4, 35/1.2"
+dotnet run --project src/PhotoClippy.Cli -- run /tmp/samplelib -c "24/1.4, 35/1.2" -o /tmp/photo-report
 ```
 
 - **Tests:** the full suite includes timing-sensitive benchmarks. The command above runs projects

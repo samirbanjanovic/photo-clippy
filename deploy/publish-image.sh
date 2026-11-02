@@ -31,10 +31,8 @@ Builds deploy/Dockerfile and pushes it to the registry as
 Options:
   -r, --registry HOST   registry host            (default: ${REGISTRY}, env PHOTO_CLIPPY_REGISTRY)
   -i, --image NAME      image name               (default: ${IMAGE}, env PHOTO_CLIPPY_IMAGE)
-  -p, --platform LIST   target platform(s)       (default: ${PLATFORM}, env PHOTO_CLIPPY_PLATFORM)
-                        Use linux/amd64 for an x86-64 lab host, linux/arm64 for an ARM one.
-                        A comma list such as linux/amd64,linux/arm64 builds a multi-arch
-                        image straight into the registry (no local load or smoke test).
+  -p, --platform ARCH   target platform          (default: ${PLATFORM}, env PHOTO_CLIPPY_PLATFORM)
+                        linux/amd64 for an x86-64 lab host, linux/arm64 for an ARM one.
   -t, --tag TAG         add an extra tag; repeatable
       --no-latest       do not tag or push :latest
       --no-push         build and smoke test locally, do not contact the registry
@@ -46,10 +44,12 @@ Options:
 Registry login (only if the registry requires it): set REGISTRY_USERNAME and
 REGISTRY_PASSWORD; the password is passed on stdin, never on the command line.
 
-TLS: the lab registry uses a certificate Docker does not trust by default. Either put
-the CA at ~/.docker/certs.d/<registry>/ca.crt, or add "<registry>" to
-"insecure-registries" in the Docker daemon settings (Docker Desktop: Settings > Docker
-Engine) and restart Docker. See the README "Publishing to the lab registry" section.
+TLS: the lab registry sits behind Traefik's self-signed default certificate, which Docker
+rejects. Add "<registry>" to "insecure-registries" in the Docker daemon settings (Docker
+Desktop: Settings > Docker Engine) and restart Docker, on this machine and on every host
+that pulls. Once Traefik serves a certificate issued for <registry> by your own CA, trust
+that CA at ~/.docker/certs.d/<registry>/ca.crt instead. See the README "Publishing to the
+lab registry" section.
 EOF
 }
 
@@ -82,11 +82,9 @@ DOCKERFILE="${ROOT}/deploy/Dockerfile"
 REGISTRY="${REGISTRY#http://}"; REGISTRY="${REGISTRY#https://}"; REGISTRY="${REGISTRY%/}"
 [ -n "${REGISTRY}" ] || die "registry must not be empty"
 
-MULTI_ARCH=0
-case "${PLATFORM}" in *,*) MULTI_ARCH=1 ;; esac
-if [ "${MULTI_ARCH}" = 1 ] && [ "${PUSH}" = 0 ]; then
-  die "a multi-platform build can only be pushed; use a single --platform with --no-push"
-fi
+case "${PLATFORM}" in
+  *,*) die "pass a single platform such as linux/amd64 or linux/arm64; multi-platform images are not supported" ;;
+esac
 
 VERSION="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' "${ROOT}/Directory.Build.props" | head -n 1)"
 [ -n "${VERSION}" ] || die "could not read <Version> from Directory.Build.props"
@@ -138,9 +136,9 @@ if [ "${PUSH}" = 1 ] && [ "${PREFLIGHT}" = 1 ] && [ "${DRY_RUN}" = 0 ]; then
       *)   die "https://${REGISTRY}/v2/ answered HTTP ${code}, which is not a Docker registry. (--skip-preflight to override)" ;;
     esac
     if ! curl -sS -o /dev/null --max-time 8 "https://${REGISTRY}/v2/" 2>/dev/null; then
-      warn "this machine does not trust the certificate for ${REGISTRY}. The push fails with an x509 error"
-      warn "unless Docker trusts it: add the CA to ~/.docker/certs.d/${REGISTRY}/ca.crt or list ${REGISTRY}"
-      warn "under insecure-registries in the Docker daemon settings."
+      warn "this machine does not trust the certificate for ${REGISTRY}, so the push fails with an x509 error"
+      warn "unless Docker is told otherwise: list ${REGISTRY} under insecure-registries in the Docker daemon"
+      warn "settings and restart Docker (see --help for the certs.d alternative)."
     fi
   fi
 fi
@@ -167,24 +165,19 @@ BUILD_ARGS=(
 )
 BUILD_ARGS+=("${TAG_ARGS[@]}")
 
-if [ "${MULTI_ARCH}" = 1 ]; then
-  info "building and pushing ${PLATFORM}"
-  run docker "${BUILD_ARGS[@]}" --push "${ROOT}"
-else
-  info "building ${PLATFORM}"
-  run docker "${BUILD_ARGS[@]}" --load "${ROOT}"
+info "building ${PLATFORM}"
+run docker "${BUILD_ARGS[@]}" --load "${ROOT}"
 
-  if [ "${SMOKE}" = 1 ]; then
-    info "smoke test: ${PRIMARY} --version"
-    run docker run --rm --platform "${PLATFORM}" "${PRIMARY}" --version
-  fi
+if [ "${SMOKE}" = 1 ]; then
+  info "smoke test: ${PRIMARY} --version"
+  run docker run --rm --platform "${PLATFORM}" "${PRIMARY}" --version
+fi
 
-  if [ "${PUSH}" = 1 ]; then
-    for t in "${TAGS[@]}"; do
-      info "pushing ${REPO}:${t}"
-      run docker push "${REPO}:${t}"
-    done
-  fi
+if [ "${PUSH}" = 1 ]; then
+  for t in "${TAGS[@]}"; do
+    info "pushing ${REPO}:${t}"
+    run docker push "${REPO}:${t}"
+  done
 fi
 
 if [ "${DRY_RUN}" = 1 ]; then
