@@ -251,9 +251,10 @@ step, updates live during scans, and doesn't send anything outside your network.
 
 | page | what it does |
 |---|---|
-| **Overview** `/` | Library summary, focal/aperture/ISO/subject distributions, insights; scan status with *Scan now* and the next scheduled scan |
+| **Overview** `/` | Library summary, focal/aperture/ISO/subject distributions, insights; scan status with *Scan now*, the next scheduled scan and what the last scan did (who started it, how long it took, how many files were read versus served from the cache) |
 | **Report** `/reports` | The latest full HTML report embedded, plus JSON/CSV downloads |
 | **Lenses** `/lenses` | Type candidates (`24/1.4`, `24-70/2.8 900g $2100`, quick-add chips) or browse the lens database by maker, mount and search; pick body/preset/limits, rank without rescanning; *Save as defaults* |
+| **Platform** `/platform` | Live process telemetry (CPU against the container's core limit, memory against its memory limit, managed heap, allocation rate, GC pauses, storage I/O, thread pool, HTTP rate and p95 latency, scan throughput) over the last 15 minutes; the running scan stage by stage with cache hits, rate and ETA; scan history (kept across restarts in `<home>/state/scan-jobs.json`) with per-scan CPU, peak memory, allocations and disk reads; storage breakdown and free space; runtime and host details; and a filterable log tail. Admins only |
 | **Settings** `/settings` | Library folders (with a folder picker), analysis, components (enable/disable plugins, genre weights, health), recommendation defaults, report, schedule, model download. Admins only |
 | **Account** `/access` | Your session and password; admins also manage accounts here |
 
@@ -267,13 +268,14 @@ for the process lifetime.
 |---|---|
 | `GET /report/<file>` | Latest rendered report files (HTML, JSON, CSV) |
 | `GET /healthz` | `{"status":"ok","version":…,"scan":…}` (no sign-in needed) |
-| `GET /api/v1/scan` | Current or last scan state |
+| `GET /api/v1/scan` | Current or last scan state, including `trigger` (`startup`, `web`, `api`, `schedule`), `jobId` and `cached` |
 | `POST /api/v1/scan` | Start a scan (`202`; `409` if one is running) |
 | `GET /api/v1/events` | Server-sent events: `scan.state`, `scan.started`, `scan.progress`, `scan.completed`, `scan.failed`, `scan.cancelled`, `recommendation.updated`, `config.applied`, `lenses.updated` |
 | `GET /api/v1/snapshot` | Latest analysis snapshot (profile, insights, ranking) as JSON |
 | `POST /api/v1/recommendations` | Re-rank without rescanning; see the example after this table. Re-renders the report unless `"render": false` |
 | `GET /api/v1/plugins?health=true` | Plugin inventory |
 | `GET /api/v1/lenses?q=&maker=&mount=&body=&limit=` | Search the lens database; `body` resolves a camera to its mount. Each lens includes its candidate `shorthand` |
+| `GET /api/v1/platform?samples=&log=` | Everything on the Platform page: host and limits, the latest sample and 15-minute history, HTTP and session totals, scan state, scan history, storage, the last run's timings and plugins, and the recent log. Pass `samples=false` or `log=false` for a smaller payload. Admins only |
 | `POST /api/v1/lenses/update` | Download or refresh the lens database (`202`; `409` if one is running; ends with a `lenses.updated` event) |
 
 `POST /api/v1/recommendations` accepts this body:

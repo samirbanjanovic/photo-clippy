@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -91,6 +92,12 @@ internal static partial class CliApplication
         builder.Services.AddSingleton(runtime);
         builder.Services.AddSingleton(coordinator);
         builder.Services.AddSingleton(scheduler);
+        using var monitor = new PlatformMonitor(coordinator);
+        runtime.LoggerFactory.AddProvider(monitor.LoggerProvider);
+        var storage = new StorageProbe(runtime);
+        builder.Services.AddSingleton(monitor);
+        builder.Services.AddSingleton(storage);
+        builder.Services.AddSingleton<CircuitHandler>(monitor.CircuitHandler);
         builder.Services.AddSingleton(sp => new SettingsService(
             runtime,
             coordinator,
@@ -110,6 +117,7 @@ internal static partial class CliApplication
         var stopping = app.Lifetime.ApplicationStopping;
         Directory.CreateDirectory(coordinator.ReportDirectory);
 
+        app.Use((context, next) => monitor.TrackRequestAsync(context, () => next(context)));
         app.UsePhotoClippyAuth(authLogger);
         app.RequireSignIn("/report");
         app.UseStaticFiles(new StaticFileOptions
@@ -135,7 +143,7 @@ internal static partial class CliApplication
                 : Json(new { snapshot.Run, snapshot.Profile, snapshot.Systems, snapshot.Owned, snapshot.Insights, snapshot.Recommendation });
         });
         api.MapGet("/scan", () => Json(coordinator.State));
-        api.MapPost("/scan", () => coordinator.TryStartScan(stopping)
+        api.MapPost("/scan", () => coordinator.TryStartScan(ScanTriggers.Api, stopping)
             ? Json(coordinator.State, StatusCodes.Status202Accepted)
             : Problem(HttpStatusCode.Conflict, "A scan is already running.", "GET /api/v1/scan or /api/v1/events for progress."));
         api.MapPost("/recommendations", async (HttpRequest request, CancellationToken ct) =>
@@ -193,6 +201,12 @@ internal static partial class CliApplication
         api.MapPost("/lenses/update", (LensCatalogService lenses) => lenses.TryStartUpdate(stopping)
             ? Json(new { updating = true }, StatusCodes.Status202Accepted)
             : Problem(HttpStatusCode.Conflict, "An update is already running."));
+        api.MapGet("/platform", async (bool? samples, bool? log, CancellationToken ct) =>
+            {
+                var lastRun = await PlatformReport.LoadLastRunAsync(runtime, ct).ConfigureAwait(false);
+                return Json(PlatformReport.Build(coordinator, scheduler, monitor, storage, lastRun, samples ?? true, log ?? true));
+            })
+            .RequireAuthorization(p => p.RequireRole(AuthRoles.Admin));
         api.MapGet("/events", (HttpContext context, CancellationToken ct) => StreamEventsAsync(context, coordinator, ct));
 
         var auth = app.Services.GetRequiredService<AuthService>();
@@ -218,12 +232,13 @@ internal static partial class CliApplication
 
         if (serve.RunOnStart && runtime.Options.Library.Roots.Count > 0)
         {
-            coordinator.TryStartScan(stopping);
+            coordinator.TryStartScan(ScanTriggers.Startup, stopping);
         }
 
         var schedule = scheduler.RunAsync(stopping);
+        var sampling = monitor.RunAsync(stopping);
         await app.WaitForShutdownAsync(cancellationToken).ConfigureAwait(false);
-        await Task.WhenAny(Task.WhenAll(schedule, coordinator.Current), Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None)).ConfigureAwait(false);
+        await Task.WhenAny(Task.WhenAll(schedule, sampling, coordinator.Current), Task.Delay(TimeSpan.FromSeconds(10), CancellationToken.None)).ConfigureAwait(false);
         return ExitCodes.Ok;
     }
 

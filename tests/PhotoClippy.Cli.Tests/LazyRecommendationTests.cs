@@ -192,9 +192,19 @@ public sealed class LazyRecommendationTests : IDisposable
 
     private static async Task ScanAsync(ScanCoordinator coordinator)
     {
-        Assert.True(coordinator.TryStartScan(CancellationToken.None));
+        Assert.True(coordinator.TryStartScan(ScanTriggers.Api, CancellationToken.None));
         await coordinator.Current.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.True(coordinator.State.State == "completed", coordinator.State.Error);
+
+        var job = Assert.IsType<ScanJob>(coordinator.Jobs.Last);
+        Assert.Equal(coordinator.State.JobId, job.Id);
+        Assert.Equal(ScanTriggers.Api, job.Trigger);
+        Assert.Equal("completed", job.State);
+        Assert.Equal(coordinator.State.RunId, job.RunId);
+        Assert.True(job.FilesSeen >= 1);
+        Assert.Contains(job.Stages, s => s.Stage == "metadata" && s.Total >= 1);
+        Assert.NotNull(job.CpuSeconds);
+        Assert.Null(coordinator.RunningJob);
     }
 
     private static void AssertAnalysisOnly(AnalysisSnapshot snapshot)

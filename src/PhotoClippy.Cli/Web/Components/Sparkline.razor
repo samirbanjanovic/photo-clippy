@@ -1,0 +1,67 @@
+@* Inline SVG area chart for a rolling series; no JavaScript. Gaps (null) break the line. *@
+<figure class="spark tone-@Tone">
+    <figcaption>
+        <span class="spark-title">@Title</span>
+        <span class="spark-value">@Current</span>
+    </figcaption>
+    <svg viewBox="0 0 @W @H" preserveAspectRatio="none" role="img" aria-label="@Title">
+        <line class="spark-axis" x1="0" y1="@H" x2="@W" y2="@H" />
+        @foreach (var (area, line) in Paths())
+        {
+            <path class="spark-area" d="@area" />
+            <path class="spark-line" d="@line" />
+        }
+    </svg>
+    <div class="spark-scale"><span>@(Caption ?? $"last {Span}")</span><span>peak @Peak</span></div>
+</figure>
+
+@code {
+    private const double W = 300;
+    private const double H = 60;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public IReadOnlyList<double?> Values { get; set; } = [];
+    [Parameter] public Func<double?, string> Format { get; set; } = v => Fmt.Num(v);
+    [Parameter] public double? Max { get; set; }
+    [Parameter] public string Tone { get; set; } = "fjord";
+    [Parameter] public string? Caption { get; set; }
+    [Parameter] public TimeSpan Window { get; set; }
+
+    private string Current => Format(Values.Count == 0 ? null : Values[^1]);
+
+    private double Top => Math.Max(Max ?? 0, Values.Where(v => v is not null).Select(v => v!.Value).DefaultIfEmpty(0).Max());
+
+    private string Peak => Format(Values.Any(v => v is not null) ? Values.Where(v => v is not null).Max() : null);
+
+    private string Span => Window.TotalMinutes >= 1 ? $"{Window.TotalMinutes:0} min" : $"{Window.TotalSeconds:0} s";
+
+    private IEnumerable<(string Area, string Line)> Paths()
+    {
+        if (Values.Count < 2)
+        {
+            yield break;
+        }
+
+        var top = Top <= 0 ? 1 : Top * 1.08;
+        var step = W / (Values.Count - 1);
+        var run = new List<(double X, double Y)>();
+        for (var i = 0; i <= Values.Count; i++)
+        {
+            if (i < Values.Count && Values[i] is { } v)
+            {
+                run.Add((i * step, H - Math.Clamp(v / top, 0, 1) * (H - 2)));
+                continue;
+            }
+
+            if (run.Count > 1)
+            {
+                var line = string.Join(' ', run.Select((p, j) => (j == 0 ? "M" : "L") + P(p.X) + "," + P(p.Y)));
+                yield return ($"{line} L{P(run[^1].X)},{P(H)} L{P(run[0].X)},{P(H)} Z", line);
+            }
+
+            run.Clear();
+        }
+    }
+
+    private static string P(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+}

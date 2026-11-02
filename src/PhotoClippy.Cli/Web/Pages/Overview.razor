@@ -91,6 +91,15 @@
     {
         <p class="notice danger">@state.Error</p>
     }
+    @if (state.State != "running" && Coordinator.Jobs.Last is { } job)
+    {
+        <p class="scan-result caption">
+            <span>@JobSummary(job)</span>
+            <AuthorizeView Roles="@AuthRoles.Admin">
+                <span class="sep">·</span><a href="platform#jobs">Scan history</a>
+            </AuthorizeView>
+        </p>
+    }
     @if (_message is not null)
     {
         <p class="notice">@_message</p>
@@ -229,7 +238,29 @@ else
 
     private void Scan()
     {
-        _message = Coordinator.TryStartScan(Lifetime.ApplicationStopping) ? null : "A scan or ranking is already running.";
+        _message = Coordinator.TryStartScan(ScanTriggers.Web, Lifetime.ApplicationStopping) ? null : "A scan or ranking is already running.";
+    }
+
+    private static string JobSummary(ScanJob job)
+    {
+        var who = job.Trigger switch
+        {
+            ScanTriggers.Web => "from the web UI",
+            ScanTriggers.Api => "through the API",
+            ScanTriggers.Schedule => "on schedule",
+            ScanTriggers.Startup => "at startup",
+            _ => job.Trigger,
+        };
+        var head = $"Last scan {who} {Fmt.Ago(job.FinishedUtc ?? job.StartedUtc)}, {job.State} in {Fmt.Duration(job.Seconds)}";
+        if (job.State != "completed")
+        {
+            return head;
+        }
+
+        var read = job.FilesRead is 0 && job.FramesAnalysed is 0
+            ? "nothing changed, everything came from the cache"
+            : $"{Fmt.N(job.FilesRead ?? 0)} files read, {Fmt.N(job.FramesAnalysed ?? 0)} frames analysed";
+        return $"{head} · {Fmt.N(job.FilesSeen ?? 0)} files checked · {read}";
     }
 
     private Distribution? Dist(string id) => _snapshot?.Profile.Distributions.GetValueOrDefault(id);

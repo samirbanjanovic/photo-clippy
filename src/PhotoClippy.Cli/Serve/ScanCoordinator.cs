@@ -19,6 +19,12 @@ internal sealed record ScanState
     public int? Captures { get; init; }
     public IReadOnlyList<string> Files { get; init; } = [];
     public string? Error { get; init; }
+    /// <summary>What started the scan: startup, web, api or schedule.</summary>
+    public string? Trigger { get; init; }
+    /// <summary>Items of the current stage served from the cache.</summary>
+    public long Cached { get; init; }
+    /// <summary>Id of the scan job in <c>GET /api/v1/platform</c>.</summary>
+    public string? JobId { get; init; }
 }
 
 internal sealed record ServerEvent(string Type, object? Data);
@@ -45,6 +51,9 @@ internal sealed class BusyException(string message) : Exception(message);
 internal sealed class ScanCoordinator(AppRuntime runtime, ILogger<ScanCoordinator> logger) : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Lock _jobLock = new();
+    private ScanJob? _job;
+    private ProcessReading _jobStart;
     private readonly Lock _subscribersLock = new();
     private readonly List<Channel<ServerEvent>> _subscribers = [];
     private ScanState _state = new();
@@ -57,6 +66,33 @@ internal sealed class ScanCoordinator(AppRuntime runtime, ILogger<ScanCoordinato
     public string ReportFile => Path.Combine(ReportDirectory, runtime.Options.Report.BaseName + ".html");
 
     public Task Current => Volatile.Read(ref _current);
+
+    /// <summary>Scan history (newest last on disk, newest first from <see cref="ScanJobLog.Recent"/>).</summary>
+    public ScanJobLog Jobs { get; } = new(Path.Combine(runtime.Paths.State, "scan-jobs.json"), logger);
+
+    /// <summary>The scan in progress, if any.</summary>
+    public ScanJob? RunningJob
+    {
+        get
+        {
+            lock (_jobLock)
+            {
+                return _job;
+            }
+        }
+    }
+
+    /// <summary>Number of live event subscribers (open pages and SSE clients).</summary>
+    public int SubscriberCount
+    {
+        get
+        {
+            lock (_subscribersLock)
+            {
+                return _subscribers.Count;
+            }
+        }
+    }
 
     /// <summary>True while a scan or a re-ranking holds the coordinator.</summary>
     public bool IsBusy => _gate.CurrentCount == 0;
@@ -78,14 +114,25 @@ internal sealed class ScanCoordinator(AppRuntime runtime, ILogger<ScanCoordinato
     /// <summary>Publishes an application event (e.g. config.applied) to live subscribers.</summary>
     public void Notify(string type, object? data = null) => Publish(type, data);
 
-    public bool TryStartScan(CancellationToken stopping)
+    public bool TryStartScan(string trigger, CancellationToken stopping)
     {
         if (!_gate.Wait(0, CancellationToken.None))
         {
+            logger.LogInformation("Scan request ({Trigger}) ignored: a scan or ranking is already running", trigger);
             return false;
         }
 
-        SetState(new ScanState { State = "running", StartedUtc = DateTimeOffset.UtcNow, Stage = PipelineStages.Discover });
+        var now = DateTimeOffset.UtcNow;
+        var job = new ScanJob { Id = now.ToString("yyyyMMdd'T'HHmmss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture), Trigger = trigger, StartedUtc = now };
+        lock (_jobLock)
+        {
+            _job = job;
+            _jobStart = ProcessReading.Take();
+        }
+
+        Jobs.Upsert(job);
+        logger.LogInformation("Scan {JobId} started ({Trigger})", job.Id, trigger);
+        SetState(new ScanState { State = "running", StartedUtc = now, Stage = PipelineStages.Discover, Trigger = trigger, JobId = job.Id });
         Publish("scan.started", State);
         Volatile.Write(ref _current, Task.Run(async () =>
         {
@@ -158,11 +205,14 @@ internal sealed class ScanCoordinator(AppRuntime runtime, ILogger<ScanCoordinato
         var started = State.StartedUtc;
         try
         {
-            var snapshot = await Workflows.ScanAsync(runtime, new StateProgress(this), cancellationToken).ConfigureAwait(false);
+            var progress = new StateProgress(this);
+            var snapshot = await Workflows.ScanAsync(runtime, progress, cancellationToken).ConfigureAwait(false);
             IReadOnlyList<string> files = [];
             if (snapshot.Profile.Library.CapturesInScope > 0)
             {
+                progress.Report(new PipelineProgress(PipelineStages.Render, 0, 1));
                 var outcome = await Workflows.RenderAsync(runtime, snapshot, null, cancellationToken).ConfigureAwait(false);
+                progress.Report(new PipelineProgress(PipelineStages.Render, 1, 1));
                 LogFailures(outcome);
                 files = outcome.Files;
             }
@@ -170,6 +220,16 @@ internal sealed class ScanCoordinator(AppRuntime runtime, ILogger<ScanCoordinato
             {
                 logger.LogWarning("Scan found no captures in scope ({Files} files seen)", snapshot.Profile.Library.FilesSeen);
             }
+
+            var library = snapshot.Profile.Library;
+            FinishJob("completed", null, job => job with
+            {
+                RunId = snapshot.Run.RunId,
+                FilesSeen = library.FilesSeen,
+                Bytes = library.TotalBytes,
+                Captures = library.Captures,
+                CapturesInScope = library.CapturesInScope,
+            });
 
             SetState(new ScanState
             {
@@ -179,12 +239,14 @@ internal sealed class ScanCoordinator(AppRuntime runtime, ILogger<ScanCoordinato
                 RunId = snapshot.Run.RunId,
                 Captures = snapshot.Profile.Library.CapturesInScope,
                 Files = files,
+                Trigger = State.Trigger,
+                JobId = State.JobId,
             });
-            logger.LogInformation("Scan {RunId} finished: {Captures} captures in scope", snapshot.Run.RunId, snapshot.Profile.Library.CapturesInScope);
             Publish("scan.completed", State);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            FinishJob("cancelled", null, null);
             SetState(State with { State = "cancelled", FinishedUtc = DateTimeOffset.UtcNow });
             Publish("scan.cancelled", State);
         }
@@ -192,9 +254,105 @@ internal sealed class ScanCoordinator(AppRuntime runtime, ILogger<ScanCoordinato
         {
             var message = ex is CliException { Hint: { } hint } ? $"{ex.Message} {hint}" : ex.Message;
             logger.LogError(ex is CliException ? null : ex, "Scan failed: {Message}", message);
+            FinishJob("failed", message, null);
             SetState(State with { State = "failed", FinishedUtc = DateTimeOffset.UtcNow, Error = message });
             Publish("scan.failed", State);
         }
+    }
+
+    /// <summary>Raises the running job's peak working set (called by the platform sampler).</summary>
+    public void ObserveWorkingSet(long bytes)
+    {
+        lock (_jobLock)
+        {
+            if (_job is { } job && bytes > (job.PeakWorkingSetBytes ?? 0))
+            {
+                _job = job with { PeakWorkingSetBytes = bytes };
+            }
+        }
+    }
+
+    private void TrackStage(PipelineProgress value)
+    {
+        lock (_jobLock)
+        {
+            if (_job is not { } job)
+            {
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            var stages = job.Stages.ToList();
+            var index = stages.FindIndex(s => s.Stage == value.Stage);
+            if (index < 0)
+            {
+                CloseLastStage(stages, now);
+                stages.Add(new StageStat { Stage = value.Stage, StartedUtc = now, Completed = value.Completed, Total = value.Total, Cached = value.Cached });
+            }
+            else
+            {
+                var stage = stages[index];
+                stages[index] = stage with
+                {
+                    Seconds = (now - stage.StartedUtc).TotalSeconds,
+                    Completed = value.Completed,
+                    Total = value.Total,
+                    Cached = Math.Max(stage.Cached, value.Cached),
+                };
+            }
+
+            _job = job with { Stages = stages };
+        }
+    }
+
+    /// <summary>A stage runs until the next one starts, even if it reported progress only once.</summary>
+    private static void CloseLastStage(List<StageStat> stages, DateTimeOffset now)
+    {
+        if (stages.Count > 0 && stages[^1] is var last && now - last.StartedUtc is var elapsed && elapsed.TotalSeconds > last.Seconds)
+        {
+            stages[^1] = last with { Seconds = elapsed.TotalSeconds };
+        }
+    }
+
+    private void FinishJob(string state, string? error, Func<ScanJob, ScanJob>? update)
+    {
+        ScanJob finished;
+        lock (_jobLock)
+        {
+            if (_job is not { } job)
+            {
+                return;
+            }
+
+            var end = ProcessReading.Take();
+            var start = _jobStart;
+            var now = DateTimeOffset.UtcNow;
+            var closed = job.Stages.ToList();
+            CloseLastStage(closed, now);
+            job = job with { Stages = closed };
+            var metadata = job.Stages.FirstOrDefault(s => s.Stage == PipelineStages.Metadata);
+            var frames = job.Stages.FirstOrDefault(s => s.Stage == PipelineStages.Frames);
+            finished = job with
+            {
+                State = state,
+                Error = error,
+                FinishedUtc = now,
+                FilesRead = metadata is null ? null : Math.Max(0, metadata.Completed - metadata.Cached),
+                FramesAnalysed = frames is null ? null : Math.Max(0, frames.Completed - frames.Cached),
+                CpuSeconds = (end.CpuTime - start.CpuTime).TotalSeconds,
+                AllocatedBytes = end.Allocated - start.Allocated,
+                DiskReadBytes = end.StorageRead - start.StorageRead,
+                Gen2Collections = end.Gen2 - start.Gen2,
+                PeakWorkingSetBytes = Math.Max(job.PeakWorkingSetBytes ?? 0, end.WorkingSet),
+            };
+            finished = update?.Invoke(finished) ?? finished;
+            _job = null;
+        }
+
+        Jobs.Upsert(finished);
+        logger.LogInformation(
+            "Scan {JobId} {State} in {Seconds:0.###} s: {Read} of {Files} files read, {Frames} frames analysed, {Captures} captures in scope",
+            finished.Id, state, finished.Seconds, finished.FilesRead ?? 0, finished.FilesSeen ?? 0, finished.FramesAnalysed ?? 0, finished.CapturesInScope ?? 0);
     }
 
     private void LogFailures(ReportOutcome outcome)
@@ -252,7 +410,8 @@ internal sealed class ScanCoordinator(AppRuntime runtime, ILogger<ScanCoordinato
 
         public void Report(PipelineProgress value)
         {
-            owner.SetState(owner.State with { Stage = value.Stage, Completed = value.Completed, Total = value.Total });
+            owner.TrackStage(value);
+            owner.SetState(owner.State with { Stage = value.Stage, Completed = value.Completed, Total = value.Total, Cached = value.Cached });
             var now = Environment.TickCount64;
             lock (_lock)
             {

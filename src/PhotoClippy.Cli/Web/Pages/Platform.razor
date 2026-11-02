@@ -1,0 +1,490 @@
+@page "/platform"
+@attribute [Authorize(Roles = AuthRoles.Admin)]
+@using Microsoft.Extensions.Logging
+@using PhotoClippy.Core.Pipeline
+@inherits LiveComponent
+@inject AppRuntime Runtime
+@inject ScanScheduler Scheduler
+@inject PlatformMonitor Monitor
+@inject StorageProbe Storage
+
+<PageTitle>Platform · Photo Clippy</PageTitle>
+
+@{
+    var r = _report;
+    var now = r.Now;
+    var cores = r.Host.CpuLimitCores ?? r.Host.Processors;
+    var memoryCeiling = r.Host.MemoryLimitBytes ?? r.Host.TotalAvailableMemoryBytes;
+    var samples = r.Samples;
+    var window = samples.Count > 1 ? samples[^1].Utc - samples[0].Utc : TimeSpan.Zero;
+    var finished = r.Jobs.Where(j => j.State != "running").ToList();
+}
+
+<section class="hero compact">
+    <p class="eyebrow">Platform</p>
+    <h1>How Photo Clippy is running</h1>
+    <p class="lede">
+        Version @r.Version on <strong>@r.Host.Machine</strong>, up for @Fmt.Duration(r.UptimeSeconds) since @r.StartedUtc.ToLocalTime().ToString("d MMM HH:mm", CultureInfo.InvariantCulture).
+        Live figures refresh every @Fmt.Duration(PlatformMonitor.Interval.TotalSeconds); raw data at <a href="api/v1/platform" target="_blank">/api/v1/platform</a>.
+    </p>
+</section>
+
+<nav class="toc">
+    <a href="platform#live">Live</a>
+    <a href="platform#scan">Scan</a>
+    <a href="platform#jobs">History</a>
+    <a href="platform#storage">Storage</a>
+    <a href="platform#runtime">Runtime</a>
+    <a href="platform#log">Log</a>
+</nav>
+
+<section class="kpis platform" id="live">
+    <div class="kpi">
+        <span class="kpi-value"><span class="dot dot-@r.Scan.State"></span>@StateName(r.Scan.State)</span>
+        <span class="kpi-label">@(r.Scan.State == "running" ? Fmt.Stage(r.Scan.Stage) : "scanner")</span>
+    </div>
+    <div class="kpi">
+        <span class="kpi-value">@Fmt.Num(now?.CpuPercent / cores, "0")%</span>
+        <span class="kpi-label">CPU of @Fmt.Num(cores, "0.#") @(cores == 1 ? "core" : "cores")</span>
+    </div>
+    <div class="kpi">
+        <span class="kpi-value">@Fmt.Bytes(now?.WorkingSetBytes)</span>
+        <span class="kpi-label">memory · @Fmt.Pct(now is null || memoryCeiling <= 0 ? 0 : now.WorkingSetBytes / (double)memoryCeiling) of @(r.Host.MemoryLimitBytes is null ? "host" : "limit")</span>
+    </div>
+    <div class="kpi">
+        <span class="kpi-value">@Fmt.Bytes(now?.GcHeapBytes)</span>
+        <span class="kpi-label">managed heap · @Fmt.N(now?.Gen2 ?? 0) gen 2</span>
+    </div>
+    <div class="kpi">
+        <span class="kpi-value">@(now?.Threads ?? 0)</span>
+        <span class="kpi-label">threads · @(now?.PoolThreads ?? 0) pooled</span>
+    </div>
+    <div class="kpi">
+        <span class="kpi-value">@r.Totals.Sessions</span>
+        <span class="kpi-label">live @(r.Totals.Sessions == 1 ? "session" : "sessions") · @r.Totals.EventSubscribers listening</span>
+    </div>
+    <div class="kpi" title="@StatusLine(r.Totals.StatusClasses)">
+        <span class="kpi-value">@Fmt.N(r.Totals.Requests)</span>
+        <span class="kpi-label">HTTP requests · @Fmt.Pct(ErrorShare(r.Totals.StatusClasses)) server errors</span>
+    </div>
+</section>
+
+<section class="grid sparks">
+    <Sparkline Title="CPU" Tone="clay" Window="window" Max="cores * 100"
+               Values="@Series(s => s.CpuPercent)" Format="@(v => v is null ? "—" : Fmt.Num(v / cores, "0") + "%")"
+               Caption="@($"100% = {Fmt.Num(cores, "0.#")} {(cores == 1 ? "core" : "cores")} busy")" />
+    <Sparkline Title="Memory (working set)" Tone="dusk" Window="window"
+               Values="@Series(s => s.WorkingSetBytes)" Format="@(v => Fmt.Bytes((long?)v))" />
+    <Sparkline Title="Managed heap" Tone="moss" Window="window"
+               Values="@Series(s => s.GcHeapBytes)" Format="@(v => Fmt.Bytes((long?)v))" />
+    <Sparkline Title="Allocation rate" Tone="sand" Window="window"
+               Values="@Series(s => s.AllocatedBytesPerSecond)" Format="@(v => Fmt.Bytes((long?)v) + "/s")" />
+    <Sparkline Title="GC pause" Tone="clay" Window="window"
+               Values="@Series(s => s.GcPausePercent)" Format="@(v => Fmt.Num(v, "0.0") + "%")" Caption="share of wall time paused" />
+    <Sparkline Title="Storage read" Tone="fjord" Window="window"
+               Values="@Series(s => s.StorageReadBytesPerSecond)" Format="@(v => v is null ? "n/a" : Fmt.Bytes((long?)v) + "/s")"
+               Caption="@(samples.Any(s => s.StorageReadBytesPerSecond is not null) ? null : "Linux only (/proc/self/io)")" />
+    <Sparkline Title="Storage write" Tone="dusk" Window="window"
+               Values="@Series(s => s.StorageWriteBytesPerSecond)" Format="@(v => v is null ? "n/a" : Fmt.Bytes((long?)v) + "/s")"
+               Caption="@(samples.Any(s => s.StorageWriteBytesPerSecond is not null) ? null : "Linux only (/proc/self/io)")" />
+    <Sparkline Title="Scan throughput" Tone="moss" Window="window"
+               Values="@Series(s => s.ScanItemsPerSecond)" Format="@(v => v is null ? "idle" : Fmt.Num(v, "0.#") + " items/s")"
+               Caption="files or frames per second, cache hits excluded" />
+    <Sparkline Title="Thread-pool work" Tone="sand" Window="window"
+               Values="@Series(s => s.PoolItemsPerSecond)" Format="@(v => Fmt.Num(v, "0") + "/s")"
+               Caption="@($"queue now {now?.PoolQueue ?? 0}")" />
+    <Sparkline Title="HTTP requests" Tone="fjord" Window="window"
+               Values="@Series(s => s.RequestsPerSecond)" Format="@(v => Fmt.Num(v, "0.#") + "/s")"
+               Caption="@($"p95 {(now?.RequestMsP95 is { } p ? Fmt.Num(p, "0") + " ms" : "—")} · Blazor and event streams excluded")" />
+</section>
+
+<section class="card" id="scan">
+    <h2>@(r.RunningJob is null ? "Scanner" : "Scan in progress")</h2>
+    @if (r.RunningJob is { } running)
+    {
+        <p class="muted">
+            Started @Fmt.Ago(running.StartedUtc) @TriggerName(running.Trigger) · job <code>@running.Id</code>
+        </p>
+        <ol class="pipeline">
+            @foreach (var stage in StageOrder)
+            {
+                var stat = running.Stages.FirstOrDefault(s => s.Stage == stage);
+                var current = r.Scan.Stage == stage;
+                <li class="@(current ? "current" : stat is null ? "pending" : "done")">
+                    <span class="pipeline-name">@Fmt.Stage(stage)</span>
+                    @if (stat is not null)
+                    {
+                        <span class="pipeline-bar"><span style="width:@ProgressWidth(stat)"></span></span>
+                        <span class="pipeline-detail">@StageDetail(stat, current)</span>
+                    }
+                    else
+                    {
+                        <span class="pipeline-bar"></span>
+                        <span class="pipeline-detail muted">waiting</span>
+                    }
+                </li>
+            }
+        </ol>
+    }
+    else
+    {
+        <p class="muted">
+            Idle@(r.Jobs.Count > 0 ? $" · last scan {Fmt.Ago(r.Jobs[0].FinishedUtc ?? r.Jobs[0].StartedUtc)} ({r.Jobs[0].State})" : " · no scans recorded yet")
+            · @(r.NextScheduledScanUtc is { } next ? $"next automatic scan {Fmt.Until(next)}" : "automatic rescans off")
+        </p>
+    }
+</section>
+
+<section class="card" id="jobs">
+    <h2>Scan history</h2>
+    @if (finished.Count == 0)
+    {
+        <p class="muted">No finished scans yet. History survives restarts and keeps the last @ScanJobLog.Capacity jobs.</p>
+    }
+    else
+    {
+        <div class="columns">
+            <div>
+                <Sparkline Title="Duration" Tone="dusk" Values="@(finished.AsEnumerable().Reverse().Select(j => j.Seconds).ToList())"
+                           Format="@(v => Fmt.Duration(v))" Caption="@($"last {finished.Count} scans, oldest first")" />
+            </div>
+            <div>
+                <Sparkline Title="Files read (cache misses)" Tone="clay" Values="@(finished.AsEnumerable().Reverse().Select(j => (double?)j.FilesRead).ToList())"
+                           Format="@(v => v is null ? "—" : Fmt.N((long)v.Value))" Caption="spikes = new or changed photos" />
+            </div>
+        </div>
+
+        @if (finished[0] is { Stages.Count: > 0 } last)
+        {
+            var total = last.Stages.Sum(s => s.Seconds);
+            <h3>Where the last scan spent its time</h3>
+            <div class="stack" role="img" aria-label="Stage timings">
+                @foreach (var stage in last.Stages.Where(s => s.Seconds > 0))
+                {
+                    <span class="stack-part stage-@stage.Stage" style="width:@Share(stage.Seconds, total)" title="@($"{Fmt.Stage(stage.Stage)}: {Fmt.Duration(stage.Seconds)}")"></span>
+                }
+            </div>
+            <ul class="legend">
+                @foreach (var stage in last.Stages)
+                {
+                    <li><span class="swatch stage-@stage.Stage"></span>@Fmt.Stage(stage.Stage) <span class="muted">@Fmt.Duration(stage.Seconds)@(stage.ItemsPerSecond is { } ips ? $" · {Fmt.Num(ips, "0.#")}/s" : "")</span></li>
+                }
+            </ul>
+        }
+
+        <div class="table-scroll">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Started</th><th>Trigger</th><th>Result</th><th class="num">Duration</th><th class="num">Files</th>
+                        <th class="num">Read</th><th class="num">Frames</th><th class="num">Cache hits</th><th class="num">CPU</th>
+                        <th class="num">Peak memory</th><th class="num">Allocated</th><th class="num">Disk read</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var job in r.Jobs.Take(_jobRows))
+                    {
+                        <tr title="@job.Error">
+                            <td>@job.StartedUtc.ToLocalTime().ToString("d MMM HH:mm:ss", CultureInfo.InvariantCulture)</td>
+                            <td>@job.Trigger</td>
+                            <td><span class="badge @(job.State switch { "completed" => "ok", "running" => "", _ => "warn" })">@job.State</span></td>
+                            <td class="num">@Fmt.Duration(job.Seconds)</td>
+                            <td class="num">@(job.FilesSeen is { } f ? Fmt.N(f) : "—")</td>
+                            <td class="num">@(job.FilesRead is { } fr ? Fmt.N(fr) : "—")</td>
+                            <td class="num">@(job.FramesAnalysed is { } fa ? Fmt.N(fa) : "—")</td>
+                            <td class="num">@(job.CacheHitShare is { } c ? Fmt.Pct(c) : "—")</td>
+                            <td class="num">@(job.CpuSeconds is { } cpu ? Fmt.Duration(cpu) : "—")</td>
+                            <td class="num">@Fmt.Bytes(job.PeakWorkingSetBytes)</td>
+                            <td class="num">@Fmt.Bytes(job.AllocatedBytes)</td>
+                            <td class="num">@(job.DiskReadBytes is { } d ? Fmt.Bytes(d) : "n/a")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (r.Jobs.Count > _jobRows)
+        {
+            <button class="button" @onclick="() => _jobRows += 20">Show more</button>
+        }
+    }
+</section>
+
+<div class="columns" id="storage">
+    <section class="card">
+        <h2>Storage</h2>
+        <p class="muted">@Fmt.Bytes(r.Storage.HomeBytes) in <code>@r.Storage.Home</code> · measured @Fmt.Ago(r.Storage.MeasuredUtc)</p>
+        @if (r.Storage.Parts.Count > 0)
+        {
+            var max = r.Storage.Parts.Max(p => p.Bytes);
+            <ol class="bars tone-fjord wide-values">
+                @foreach (var part in r.Storage.Parts.OrderByDescending(p => p.Bytes))
+                {
+                    <li>
+                        <span class="bar-label">@part.Name</span>
+                        <span class="bar-track"><span class="bar-fill" style="width:@Share(part.Bytes, max)"></span></span>
+                        <span class="bar-value">@Fmt.Bytes(part.Bytes)</span>
+                    </li>
+                }
+            </ol>
+        }
+        @if (r.Storage.Cache is { } cache)
+        {
+            <dl class="readonly">
+                <dt>Cached file metadata</dt><dd>@Fmt.N(cache.MetadataRows) rows</dd>
+                <dt>Cached frame features</dt><dd>@Fmt.N(cache.FeatureRows) rows</dd>
+                <dt>Analysis snapshots</dt><dd>@Fmt.N(cache.Snapshots)</dd>
+                <dt>Cache database</dt><dd>@Fmt.Bytes(cache.Bytes)</dd>
+            </dl>
+        }
+    </section>
+    <section class="card">
+        <h2>Volumes</h2>
+        @if (r.Storage.Volumes.Count == 0)
+        {
+            <p class="muted">No volumes could be read.</p>
+        }
+        else
+        {
+            <ol class="bars tone-moss wide-values">
+                @foreach (var volume in r.Storage.Volumes)
+                {
+                    var used = volume.TotalBytes - volume.FreeBytes;
+                    <li>
+                        <span class="bar-label" title="@volume.Mount (@volume.Format)">@volume.Role · @volume.Mount</span>
+                        <span class="bar-track"><span class="bar-fill" style="width:@Share(used, volume.TotalBytes)"></span></span>
+                        <span class="bar-value">@Fmt.Bytes(volume.FreeBytes) free</span>
+                    </li>
+                }
+            </ol>
+            <p class="caption">Bars show how full each volume is; library folders are mounted read-only in Docker.</p>
+        }
+    </section>
+</div>
+
+<div class="columns" id="runtime">
+    <section class="card">
+        <h2>Runtime &amp; host</h2>
+        <dl class="readonly">
+            <dt>Operating system</dt><dd>@r.Host.Os (@r.Host.Architecture)</dd>
+            <dt>.NET</dt><dd>@r.Host.Runtime · @r.Host.RuntimeIdentifier</dd>
+            <dt>Container</dt><dd>@(r.Host.Container ? "yes" : "no")</dd>
+            <dt>Processors</dt><dd>@r.Host.Processors visible@(r.Host.CpuLimitCores is { } lim ? $" · limited to {Fmt.Num(lim, "0.##")}" : "")</dd>
+            <dt>Memory</dt><dd>@Fmt.Bytes(r.Host.TotalAvailableMemoryBytes) available to .NET@(r.Host.MemoryLimitBytes is { } ml ? $" · container limit {Fmt.Bytes(ml)}" : "")@(r.Host.ContainerMemoryBytes is { } cm ? $" · container using {Fmt.Bytes(cm)}" : "")</dd>
+            <dt>Garbage collector</dt><dd>@(r.Host.ServerGc ? "server" : "workstation") · @r.Host.GcLatency</dd>
+            <dt>Process</dt><dd>pid @r.Host.ProcessId · time zone @r.Host.TimeZone</dd>
+            <dt>In-flight requests</dt><dd>@r.Totals.InFlight</dd>
+        </dl>
+    </section>
+    <section class="card">
+        <h2>Last analysis</h2>
+        @if (_lastRun is not { } run)
+        {
+            <p class="muted">No analysis stored yet.</p>
+        }
+        else
+        {
+            var lib = run.Library;
+            <p class="muted">Run <code>@run.RunId</code> · @Fmt.Ago(run.FinishedUtc) · @Fmt.Duration((run.FinishedUtc - run.StartedUtc).TotalSeconds)</p>
+            <dl class="readonly">
+                <dt>Files seen</dt><dd>@Fmt.N(lib.FilesSeen) · @Fmt.Bytes(lib.TotalBytes)</dd>
+                <dt>With metadata</dt><dd>@Fmt.N(lib.FilesWithMetadata)</dd>
+                <dt>Captures</dt><dd>@Fmt.N(lib.Captures) (@Fmt.N(lib.CapturesInScope) in scope · @Fmt.N(lib.RawPlusJpeg) RAW+JPEG pairs)</dd>
+                <dt>Frames analysed</dt><dd>@Fmt.N(lib.FramesAnalyzed)</dd>
+                @if (lib.FileKinds.Count > 0)
+                {
+                    <dt>File kinds</dt><dd>@string.Join(" · ", lib.FileKinds.OrderByDescending(k => k.Value).Select(k => $"{k.Key} {Fmt.N(k.Value)}"))</dd>
+                }
+            </dl>
+            @if (run.Timings.Count > 0)
+            {
+                var max = run.Timings.Values.Max();
+                <h3>Stage timings</h3>
+                <ol class="bars tone-dusk wide-values">
+                    @foreach (var (stage, seconds) in run.Timings.OrderByDescending(t => t.Value))
+                    {
+                        <li>
+                            <span class="bar-label">@Fmt.Stage(stage)</span>
+                            <span class="bar-track"><span class="bar-fill" style="width:@Share(seconds, max)"></span></span>
+                            <span class="bar-value">@Fmt.Duration(seconds)</span>
+                        </li>
+                    }
+                </ol>
+            }
+            @if (run.Plugins.Count > 0)
+            {
+                <h3>Plugins in this run</h3>
+                <ul class="chips">
+                    @foreach (var plugin in run.Plugins)
+                    {
+                        <li class="chip" title="@plugin.Description">@plugin.Name <span class="muted">@plugin.Version</span></li>
+                    }
+                </ul>
+            }
+        }
+    </section>
+</div>
+
+<section class="card" id="log">
+    <div class="log-head">
+        <h2>Log</h2>
+        <div class="chips" role="group" aria-label="Minimum level">
+            @foreach (var level in new[] { LogLevel.Information, LogLevel.Warning, LogLevel.Error })
+            {
+                <button class="chip @(_minLevel == level ? "selected" : null)" @onclick="() => _minLevel = level">@LevelName(level)+</button>
+            }
+        </div>
+    </div>
+    @{
+        var entries = r.Log.Where(e => e.Level >= _minLevel).Take(_logRows).ToList();
+    }
+    @if (entries.Count == 0)
+    {
+        <p class="muted">Nothing at this level since the server started.</p>
+    }
+    else
+    {
+        <ol class="log">
+            @foreach (var entry in entries)
+            {
+                <li class="log-@LevelName(entry.Level)">
+                    <time>@entry.Utc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</time>
+                    <span class="log-level">@LevelName(entry.Level)</span>
+                    <span class="log-category">@entry.Category</span>
+                    <span class="log-message">@entry.Message@(entry.Exception is { } ex ? " — " + ex : "")</span>
+                </li>
+            }
+        </ol>
+        <p class="caption">Last @PlatformMonitor.LogCapacity entries at Information and above are kept in memory; <code>docker logs</code> has the full stream.</p>
+    }
+</section>
+
+@code {
+    private static readonly string[] StageOrder =
+    [
+        PipelineStages.Discover, PipelineStages.Metadata, PipelineStages.Normalize, PipelineStages.Frames,
+        PipelineStages.Profile, PipelineStages.Recommend, PipelineStages.Render,
+    ];
+
+    private PlatformReport _report = default!;
+    private LastRunInfo? _lastRun;
+    private PeriodicTimer? _timer;
+    private LogLevel _minLevel = LogLevel.Information;
+    private int _jobRows = 20;
+    private const int _logRows = 150;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Refresh();
+        _lastRun = await PlatformReport.LoadLastRunAsync(Runtime, Disposing);
+        _timer = new PeriodicTimer(PlatformMonitor.Interval);
+        _ = TickAsync(_timer);
+    }
+
+    private void Refresh() => _report = PlatformReport.Build(Coordinator, Scheduler, Monitor, Storage, _lastRun, includeSamples: true, includeLog: true);
+
+    private async Task TickAsync(PeriodicTimer timer)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(Disposing))
+            {
+                await InvokeAsync(() =>
+                {
+                    Refresh();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
+    private protected override async Task OnServerEventAsync(ServerEvent serverEvent)
+    {
+        if (serverEvent.Type == "scan.completed")
+        {
+            _lastRun = await PlatformReport.LoadLastRunAsync(Runtime, Disposing);
+        }
+
+        Refresh();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _timer?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private List<double?> Series(Func<PlatformSample, double?> pick) => [.. _report.Samples.Select(pick)];
+
+    private static string Share(double part, double whole) =>
+        (whole <= 0 ? 0 : Math.Clamp(part / whole, 0, 1) * 100).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+
+    private static string ProgressWidth(StageStat stat) =>
+        stat.Total is > 0 ? Share(stat.Completed, stat.Total.Value) : stat.Seconds > 0 ? "100%" : "0%";
+
+    private static string StageDetail(StageStat stat, bool current)
+    {
+        var parts = new List<string>();
+        parts.Add(stat.Total is > 0 ? $"{Fmt.N(stat.Completed)} / {Fmt.N(stat.Total.Value)}" : stat.Completed > 0 ? Fmt.N(stat.Completed) : "");
+        if (stat.Cached > 0)
+        {
+            parts.Add($"{Fmt.N(stat.Cached)} cached");
+        }
+
+        if (stat.ItemsPerSecond is { } ips)
+        {
+            parts.Add($"{Fmt.Num(ips, "0.#")}/s");
+            if (current && stat.Total is > 0 && stat.Completed < stat.Total)
+            {
+                parts.Add($"~{Fmt.Duration((stat.Total.Value - stat.Completed) / ips)} left");
+            }
+        }
+
+        parts.Add(Fmt.Duration(stat.Seconds));
+        return string.Join(" · ", parts.Where(p => p.Length > 0));
+    }
+
+    private static string StateName(string state) => state switch
+    {
+        "running" => "Scanning",
+        "completed" => "Idle",
+        "failed" => "Failed",
+        "cancelled" => "Cancelled",
+        _ => "Idle",
+    };
+
+    private static string TriggerName(string trigger) => trigger switch
+    {
+        ScanTriggers.Web => "from the web UI",
+        ScanTriggers.Api => "through the API",
+        ScanTriggers.Schedule => "on schedule",
+        ScanTriggers.Startup => "at startup",
+        _ => trigger,
+    };
+
+    private static string StatusLine(IReadOnlyDictionary<string, long> classes) =>
+        classes.Count == 0 ? "none yet" : string.Join(" · ", classes.OrderBy(c => c.Key).Select(c => $"{c.Key} {Fmt.N(c.Value)}"));
+
+    private static double ErrorShare(IReadOnlyDictionary<string, long> classes)
+    {
+        var total = classes.Values.Sum();
+        return total == 0 ? 0 : classes.GetValueOrDefault("5xx") / (double)total;
+    }
+
+    private static string LevelName(LogLevel level) => level switch
+    {
+        LogLevel.Trace => "trace",
+        LogLevel.Debug => "debug",
+        LogLevel.Information => "info",
+        LogLevel.Warning => "warn",
+        LogLevel.Error => "error",
+        LogLevel.Critical => "critical",
+        _ => "none",
+    };
+}

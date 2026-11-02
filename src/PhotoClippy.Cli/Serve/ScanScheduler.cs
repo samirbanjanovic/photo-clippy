@@ -42,7 +42,7 @@ internal sealed class ScanScheduler(AppRuntime runtime, ScanCoordinator coordina
                     remaining -= step;
                 }
 
-                if (!coordinator.TryStartScan(stopping))
+                if (!coordinator.TryStartScan(ScanTriggers.Schedule, stopping))
                 {
                     logger.LogInformation("Scheduled rescan skipped: a scan is already running");
                 }

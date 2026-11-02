@@ -25,6 +25,7 @@ public static class Fmt
     public static string Bytes(long? bytes) => bytes switch
     {
         null => "—",
+        >= 1L << 40 => (bytes.Value / (double)(1L << 40)).ToString("0.0", C) + " TB",
         >= 1L << 30 => (bytes.Value / (double)(1L << 30)).ToString("0.0", C) + " GB",
         >= 1L << 20 => (bytes.Value / (double)(1L << 20)).ToString("0", C) + " MB",
         >= 1L << 10 => (bytes.Value / (double)(1L << 10)).ToString("0", C) + " KB",
@@ -65,6 +66,16 @@ public static class Fmt
             _ => $"in {span.TotalDays.ToString("0.#", C)} d",
         };
     }
+
+    public static string Duration(double? seconds) => seconds switch
+    {
+        null => "—",
+        < 0.01 => (seconds.Value * 1000).ToString("0.##", C) + " ms",
+        < 1 => (seconds.Value * 1000).ToString("0", C) + " ms",
+        < 60 => seconds.Value.ToString("0.#", C) + " s",
+        < 3600 => $"{(int)(seconds.Value / 60)} min {(int)(seconds.Value % 60)} s",
+        _ => $"{(int)(seconds.Value / 3600)} h {(int)(seconds.Value % 3600 / 60)} min",
+    };
 
     public static string Stage(string? stage) => Ui.StageName(stage ?? "discover");
 
