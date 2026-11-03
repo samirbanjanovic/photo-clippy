@@ -615,6 +615,312 @@ tools/PhotoClippy.SampleGen/           synthetic EXIF library generator
   for example Ollama over the external HTTP transport, that receives the profile and ranking JSON.
   The contracts and `/api/v1/snapshot` already expose everything it needs.
 
+## Relative focal range: committee report and proposal
+
+**Status: design proposal for issue #3; awaiting human approval.** This section does not
+enable a feature, change lens rankings, or authorize creating implementation issues.
+
+### Committee discussion and decision
+
+Six specialist reviewers evaluated the hypothesis independently; their positions and the
+resulting design resolution are:
+
+| Role | Finding | Design consequence |
+|---|---|---|
+| Computer Vision Lead | Face, person and object boxes describe framing; saliency does not identify the intended subject. Monocular depth generally lacks independently verified metric scale. | Keep saliency, detections and distance evidence separate; allow subject correction and abstention. |
+| Optical Physics Lead | Subject occupancy depends jointly on focal length, distance and physical size. Cropping preserves viewpoint, whereas moving with a different lens changes perspective. | Compute equivalent framing, not a purported equivalent perspective. |
+| Data Science Lead | Bursts, genres, available equipment and retained keepers confound apparent preferences. | Weight independent shooting sessions, show coverage, stratify results and test on held-out sessions. |
+| Professional Photographer Lead | Negative space and surroundings may be deliberate; safety, access and timing constrain positioning. | Ask whether tighter framing preserves intent; recommend experiments before purchases. |
+| Product Lead | An explainable account of repeated cropping can help users evaluate lenses. A hidden-preference label overstates the evidence. | Start with descriptive framing insights and inspectable evidence, not “you are a 50mm photographer.” |
+| Skeptic / Devil's Advocate | Even perfect geometry cannot distinguish an intentional wide composition from an unwanted one. Metadata-only genre inference can make recommendations circular. | Require user-confirmed framing choices and prospective validation before preference-based ranking. |
+
+**Resolution:** the strong hypothesis is not identifiable from EXIF, focus distance and
+subject size alone. An 80% share of 24mm captures does not prove either a 24mm preference
+or a hidden 50mm preference. Repeated, verified final crops can support a narrower
+**observed framing preference**, conditional on genre, equipment and shooting constraints.
+The committee supports a staged, opt-in plugin investigation; automatic hidden-preference
+or purchase claims are not technically justified yet.
+
+This is a behavior-analysis proposal: ordinary focal-length histograms are context and
+baselines, not the new feature. Missing behavioral evidence must produce “insufficient
+evidence,” not a focal-length recommendation derived from EXIF alone.
+
+### Technical design
+
+#### Geometry and proposed metrics
+
+For a rectilinear lens, a distant, approximately front-facing subject of physical height
+`H`, axial distance `Z`, sensor height `S_h`, and focal length `f` occupies approximately
+`q_h = f * H / (Z * S_h)` of the image height. A bounding box measures `q_h`, not `H`
+or `Z` separately. EXIF focus distance need not be the distance to that subject.
+At macro distances this approximation fails; magnification and focus-dependent calibration
+are required. Do not infer metres from a generic assumed person height.
+
+Sensor normalization is `f_eq = f * crop_factor`. For a known sensor dimension `S`,
+the infinity-focus field of view is `2 * atan(S / (2 * f))`. Match horizontal, vertical
+or diagonal dimensions consistently; a diagonal 35mm-equivalent value alone does not
+guarantee matching horizontal framing across different aspect ratios.
+
+For a verified, same-aspect crop retaining linear fraction `r`, where `0 < r <= 1`:
+
+- Final framing equivalent: `f_final_eq = f_eq / r`.
+- Retained area: `r²`; crop dependence: `1 - r²`.
+- A 24mm-equivalent image cropped to 50mm-equivalent framing retains `r = 24/50 = 0.48`,
+  or about **23% of the original pixels**, before resizing.
+- This approximates a narrower rectilinear lens's framing **from the same viewpoint**,
+  not its depth of field, rendering, optical resolution, or a different shooting position.
+- For unequal horizontal/vertical crop fractions, retain both fractions and compute
+  axis-specific fields of view; do not report a single equivalent focal length.
+
+Keep the crop rectangle, offset, orientation and subject margins, not just its area.
+For an explicitly user-chosen target subject-height fraction `q_target`, a conditional
+framing scenario is `f_target_eq = f_eq * q_target / q_h`. It is not evidence that the
+user prefers that target. Reject proposals that cut intended subjects or required context;
+a wider scenario cannot recover pixels outside the original image.
+
+| Metric | Evidence required | Interpretation |
+|---|---|---|
+| Capture versus final-framing histogram | Reliable equivalent focal length and verified original-to-final crop transform | Observed cropping choices, not intrinsic lens preference |
+| Subject width/height, margins and placement | User-selected or validated subject box, with source/confidence | Framing habits within subject type; box area is not saliency occupancy |
+| Working-distance distribution | Finite, positive, source-qualified distances associated with the selected subject | Descriptive only; unknown/quantized focus distances stay unknown or interval-valued |
+| Crop dependence / pixel retention | Verified crop provenance and original dimensions | Resolution cost, not an aesthetic “framing efficiency” score |
+| Conditional candidate-framing coverage | Verified final crops or explicit user targets, subject/context constraints | Fraction of eligible choices a candidate could approximate at the same viewpoint |
+| Perspective preference | Calibrated scene geometry plus repeated user choices | Deferred; no scalar “perspective preference” from focal length alone |
+
+#### Existing architecture and data pipeline
+
+The proposal uses existing plugin kinds rather than a parallel analysis application:
+
+1. Reuse discovery, metadata extraction, capture normalization and shared,
+   orientation-corrected `Frame` decoding. Existing RAW+JPEG/export merging is useful but
+   does not establish a crop transform; preserve linked originals and exports before
+   reducing them to a single analysis frame. Add burst/near-duplicate handling and
+   configurable session grouping; do not equate every calendar day with one shoot.
+2. Package an optional `PhotoClippy.Plugins.BehavioralFocal` assembly exposing a public
+   parameterless `IPluginFactory` for `ICompositionAnalyzer`, selected through the existing
+   composition configuration. It receives `Frame` and `AnalysisContext.Facts`, returns
+   namespaced `CompositionFeatures.Extras`, and must not overwrite heuristic subject fields
+   or emit metadata-derived genre probabilities as independent behavioral evidence.
+3. Use a small, bounded set of numeric keys such as
+   `composition.behavioral.subjectHeight`, `composition.behavioral.subjectWidth` and
+   `composition.behavioral.detectionConfidence`. Omit unknown measurements, never encode
+   missing values as zero. `FeatureFusion` unions extras with first-wins conflict handling;
+   reserve unique names. `ProfileBuilder` currently limits extension keys to 32 and builds
+   unweighted ten-bin marginal distributions; these are suitable for a descriptive pilot,
+   **not** session-weighted joint evidence or calibrated confidence.
+4. Reuse feature caching through the plugin manifest version/fingerprint. Fingerprint model,
+   preprocessing, thresholds and other output-affecting settings. Crop-sidecar changes and
+   original/export relationships must also invalidate derived evidence; current file
+   size/mtime caching alone is not sufficient for new sidecar inputs.
+5. Before behavioral recommendations, add optional, versioned typed evidence records:
+   crop provenance/transform, selected-subject boxes and source, distance source/quality,
+   independent-session identity and validity flags. Forward per-capture evidence through
+   `CaptureSample` to a separate opt-in `IRecommender` factory in the same plugin assembly.
+   Keep geometry, confidence and ranking in the plugin; Core only normalizes and forwards
+   evidence. Do not pack categorical provenance or variable-length detections into numeric
+   extras, and do not claim independent sessions can be reconstructed from their marginals.
+6. Return an additive typed aggregate summary through `RecommendationSet` for
+   `ReportModel.Recommendation`, including when `Ranked` is empty because evidence is
+   insufficient. Existing JSON/CSV extension distribution support can serve the pilot;
+   explicit HTML/web presentation and typed-summary serialization need implementation.
+   Preserve existing MCDA ranking when the behavioral recommender is not selected.
+
+**Verified contract gaps:** `PhotoMetadata.SubjectDistanceM` exists, but `CaptureFacts`
+does not carry it to analyzers. Neither normalized crop history nor detected subject boxes
+are currently available. `CompositionFeatures.SubjectArea` is salient occupancy, not a
+detector bounding box. CLIP supplies genre classification, not localization or distance.
+`CaptureSample` has no behavioral evidence today, and report renderers receive aggregated
+`ReportModel`, not raw frames. These are implementation dependencies, not existing abilities.
+Extend contracts additively, update contract version/protocol documentation and tolerate
+absent fields in old snapshots, caches and external plugins.
+
+Required inputs depend on the claim: reliable focal/sensor normalization for equivalent
+framing; original/export linkage, crop coordinates and orientation for crop analysis;
+validated boxes for subject framing; source-qualified distance only for distance claims.
+Store capture time for session grouping, body/lens and subject type for stratification,
+and user-confirmed available gear and shooting constraints for recommendations. A resized
+export, editor software tag, or smaller dimensions alone does not prove cropping.
+
+#### CV requirements and privacy
+
+| Technique | Useful for | Decision |
+|---|---|---|
+| No AI: EXIF and verified crop geometry | Equivalent framing, pixel retention and coverage | First behavioral milestone; requires crop provenance work |
+| Existing heuristic saliency | Optional visual-prominence context | Label as proxy; never substitute for intended-subject detection |
+| Face detection | Face occupancy in user-selected portraits | Optional; face box is not whole-person extent; no identity recognition |
+| Person/general object detection | Category-specific boxes, groups and margins | Evaluate opt-in local detection and manual subject correction |
+| Segmentation | More accurate occupied area/shape | Defer until boxes demonstrate user value |
+| Monocular depth / metric distance models | Relative depth; metric estimates only with validated scale | Research only; not a recommendation prerequisite |
+
+No detector/model has been selected or benchmarked. Evaluate licensing, input resolution,
+CPU/memory cost, localization quality and domain bias on consented representative images
+before choosing one. Reuse the model asset/health-check mechanism and explicit downloads;
+missing models must not break metadata-only analysis. Process locally by default, do not
+upload photos or perform face recognition, and avoid retaining image buffers, identities,
+GPS or file paths in aggregate profiles. Provide cache/evidence deletion and opt-out.
+
+#### Statistical validity and confidence
+
+Treat sessions as independent units, collapse bursts/duplicates, and give sessions equal
+total weight within each user-selected genre/body stratum. Show raw eligible capture
+counts alongside weighted shares. Unknown genres remain visible; user labels or independent
+image classification are preferable to focal-based genre priors for validation.
+Use bounded, genre-stratified sampling for expensive CV and disclose sampled/eligible/total
+counts and sampling seed. Do not merge unrelated genres into one supposed ideal focal
+length. Report separate modes of log-equivalent-focal distributions only when they recur
+across sessions; no clustering by a predetermined “ideal lens.”
+
+Reject non-finite/non-positive geometry, invalid crop bounds, conflicting normalization,
+and distance sentinels. Flag unusual but valid frames rather than silently deleting them.
+Stratify phones, fisheyes, macro and synthetic panoramas separately or exclude with a reason.
+Report missingness by body/genre; missing metadata is not necessarily random.
+
+Provisional, **unvalidated** product gates:
+
+- Descriptive pilot: at least 100 eligible capture events across 10 independent sessions
+  per reported stratum. Below this, show counts/examples with an insufficient-evidence label.
+- Recommendation experiment: at least 300 eligible events across 30 sessions per stratum,
+  verified crop or explicit framing-choice evidence, plus successful prospective validation.
+  Counts alone cannot qualify a recommendation.
+- Proposed evidence index: `C = 100 * min(M, N, V, T)`, where `M` is the share of in-scope
+  events with all evidence required for the claim, `N = min(1, eligible_sessions/30)`,
+  `V` is the agreement rate on held-out manual checks of the evidence actually used
+  (crop linkage and, when applicable, subject selection/distance), and `T` is the fraction
+  of session-bootstrap replicates retaining the same leading candidate range.
+  Missing validation or unresolved geometry forces abstention; no bootstrap winner means
+  no ranking confidence. This index measures evidence support, **not** the probability that
+  a person “is a 50mm photographer.”
+- Tentative labels: below 60 low, 60–79 exploratory, 80+ eligible for a lens *trial*
+  only after the experiment gate. Calibrate thresholds rather than presenting them as
+  established scientific accuracy. Show components, denominator and session-bootstrap
+  intervals; high confidence cannot remove systematic selection bias.
+
+#### Candidate generation and validation
+
+For each eligible final-framing choice `i`, let `F_i` be its verified equivalent focal
+length. Normalize each user-supplied compatible candidate's range to the target body,
+then let `F_Li` be its nearest available focal length to `F_i`.
+An exploratory framing-fit score is
+`fit(L) = sum(w_i * exp(-abs(log2(F_Li/F_i)) / tau)) / sum(w_i)`,
+with equal-session weights `w_i` and a documented positive tolerance `tau`.
+Report coverage at that tolerance separately. This models framing match, not image quality;
+do not manufacture `F_i` from a detector's preferred subject size.
+
+Respect subject margins/context, camera/mount compatibility and user budget/weight constraints.
+Compare against confirmed owned lenses first; usage is not proof of ownership or availability.
+Apply genre weights explicitly, show uncertainty and ownership redundancy, and prefer
+“try your existing zoom at 50mm” or a rental over a purchase when evidence is exploratory.
+Reuse existing recommendation request/result types and MCDA criteria where applicable;
+do not silently reinterpret its `ProbabilityBest` as a probability of personal preference.
+
+Before enabling behavioral purchase ranking, preregister a within-photographer,
+counterbalanced loaner-zoom trial with available gear/access constraints recorded.
+Predict held-out user-selected final framing, compare against most-used-focal and
+genre-conditioned EXIF baselines, and collect whether suggestions preserve intended context.
+Evaluate localization/crop linkage separately from user value. Require the paired,
+session-bootstrap 95% interval for improvement over both baselines to exclude zero and
+meet a user-value margin agreed before the trial. If this fails, retain descriptive crop
+insights only; do not market the stronger hypothesis as validated.
+
+### Product design, feasibility and risks
+
+Proposed UI: a **Framing habits** panel with capture and verified-final-framing histograms
+on the same equivalent-focal axis; pixel-retention and trusted-distance distributions;
+genre/body filters; a coverage badge with exclusions and confidence components; and,
+in a later opt-in local view, original/crop overlays with a subject-correction control.
+Do not expose original-image paths or embed photos in exported reports by default.
+All wording below is illustrative, not a result measured from this repository:
+
+- “42 of 100 eligible verified crops approximate 50mm-equivalent framing from the same
+  viewpoint; these represent 10 of 25 sessions. Try that range on your zoom.”
+- “Your 24mm-equivalent to 50mm-equivalent crops retain about 23% of source pixels.
+  Would shooting tighter preserve the surrounding context you wanted?”
+- “Not enough verified crop or subject-distance evidence to suggest a different lens.”
+
+Avoid “50mm photographer trapped in a 24mm workflow,” “unusually close,” and comparisons
+with “typical 85mm photographers” without representative cohort evidence. Never claim
+“42% would need less cropping” unless the denominator, verified geometry, subject/context
+constraints and same-viewpoint assumption are explicit.
+
+| Dimension | Rating | Reason |
+|---|---|---|
+| Accuracy: verified crop/framing description | High | Deterministic geometry when provenance is trustworthy; not a promise of detector accuracy |
+| Accuracy: latent preferred lens/perspective | Low | Intent and counterfactual choices are unobserved |
+| Engineering cost | Medium | Plugin hosting exists; provenance, contracts, session evidence and UX still need work; metric depth would be High cost |
+| Data requirements | High | Original/final pairs, independent sessions and confirmed choices are needed for strong claims |
+| User value | Medium | Plausible for repeated heavy croppers; must be validated with photographers |
+
+Principal risks are keeper/gear/genre selection bias; metadata-derived circular conclusions;
+subject ambiguity, groups, occlusion and culturally biased detectors; inaccurate/quantized
+focus distance and depth scale; missing/reapplied crop edits; orientation/aspect mismatches;
+digital zoom or in-camera crops counted twice; focus breathing and distortion; fisheye,
+macro, anamorphic or stitched images; intentional negative space; and inaccessible viewpoints.
+Expose provenance, exclusions and uncertainty, keep unknowns unknown, and abstain rather
+than converting these risks into false precision.
+
+### Proposed implementation plan and GitHub issue draft
+
+**Draft parent title:** Relative focal range: opt-in behavioral framing analysis plugin
+
+**Problem:** Mounted-lens statistics do not explain whether repeated positioning and crop
+choices match the photographer's intended framing. Existing metadata/composition statistics
+lack the provenance needed to distinguish intent from constraints.
+
+**User value:** Explain repeatable framing/cropping habits, their resolution cost and
+conditional lens-trial opportunities without inventing a hidden photographic identity.
+
+**Technical approach:** Ship an optional composition/recommender plugin in stages using
+the pipeline and additive evidence contracts described above. Start with verified crop
+geometry and descriptive evidence; gate CV and ranking on validation.
+
+**Acceptance criteria:**
+
+- [ ] Disabled/unselected behavior, existing MCDA scores and old snapshots remain unchanged.
+- [ ] Public plugin factories load through existing discovery/configuration, pass health
+  checks, honor cancellation, are deterministic/thread-safe and invalidate caches correctly.
+- [ ] Geometry tests cover 24→50mm (48% linear / 23.04% area), sensor normalization,
+  aspect/orientation changes, crop offsets, invalid inputs and already-cropped digital zoom.
+- [ ] Unknown distances/crops never become zero measurements or confident recommendations;
+  saliency is not relabeled as a detected subject.
+- [ ] Capture merging, bursts, session boundaries, sampling, genre/gear confounding,
+  exclusions and absent evidence have focused tests and visible denominators.
+- [ ] JSON/CSV and HTML/web show provenance/coverage and honest abstention; no default photo
+  uploads, image embedding or identity recognition; opt-out/deletion are verified.
+- [ ] Ranking is opt-in, respects target compatibility and confirmed ownership, and remains
+  disabled until prospective validation beats both baselines under preregistered criteria.
+
+**Risks:** Non-identifiable intent, biased samples, incorrect crop/distance evidence,
+detector errors and overconfident purchase advice; mitigations are specified above.
+
+**Dependencies:** Human scope approval; consented original/export fixtures; crop-source
+support decision; additive contract/protocol/cache changes; confirmed-gear input; optional
+licensed local model evaluation; and participants for prospective validation. No new model,
+package dependency or automatic download is authorized by this report.
+
+**Proposed child drafts and dependency roadmap (not created):**
+
+| Order | Child issue draft | Depends on / completion gate |
+|---|---|---|
+| A | Specify crop/distance provenance and additive behavioral evidence contracts | Parent approval; source fixtures and backward-compatibility tests |
+| B | Preserve original/export transforms and normalize evidence | A; orientation, merge, sidecar invalidation and missingness tests |
+| C | Implement optional behavioral composition plugin and descriptive crop metrics | B; plugin hosting, geometry, cache and concurrency tests; no ranking |
+| D | Add independent-session sampling, confidence and typed summary plumbing | B/C; duplicate, stratum, bootstrap and abstention tests |
+| E | Present framing habits in reports/web with opt-out and deletion | C/D; serialization, coverage, wording and privacy checks |
+| F | Evaluate optional local subject detection with manual correction | C; licensed model benchmark and domain-bias review; not a crop-only MVP blocker |
+| G | Run prospective validation and gate behavioral recommender ranking | D/E; F only for claims using detection; preregistered baseline comparison |
+
+After each approved code milestone, run the affected existing xUnit projects first, then
+the documented build and serial full-suite commands in Development. Manually compare CLI
+and web outputs with the plugin disabled/enabled, missing evidence and missing models.
+Use source-linked synthetic geometry fixtures plus consented images; do not infer real
+behavioral accuracy from the existing synthetic EXIF sample library.
+
+**Approval checkpoint:** Review this report and approve or revise the descriptive-first
+scope and validation gates. Only after explicit approval should the parent and child issues
+be created, linked through GitHub parent/sub-issue relationships, and assigned roadmap
+milestones. The table above is a proposed roadmap, not a claim that issues or implementation
+already exist. Issue #3 should remain open pending the agreed approval/completion decision.
+
 ## About the mascot
 
 The paperclip is original artwork with aperture-blade pupils, a nod to the helpful office assistant
