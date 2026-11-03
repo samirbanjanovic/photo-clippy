@@ -4,24 +4,22 @@
 
 <PageTitle>Report · Photo Clippy</PageTitle>
 
-<section class="hero compact">
-    <p class="eyebrow">Report</p>
-    <h1>@Runtime.Options.Report.Title</h1>
-    @if (_files.Count > 0)
-    {
-        <p class="lede">
-            Rendered @Fmt.Ago(_rendered)
-            @foreach (var file in _files)
-            {
-                <span class="sep">·</span>
-                <a href="@($"report/{Uri.EscapeDataString(file.Name)}")" download="@(file.Extension == ".html" ? null : file.Name)" target="@(file.Extension == ".html" ? "_blank" : null)" rel="noopener">@Label(file)</a>
-            }
-        </p>
-    }
-</section>
-
 @if (_html is null)
 {
+    <section class="hero compact">
+        <p class="eyebrow">Report</p>
+        <h1>@Runtime.Options.Report.Title</h1>
+        @if (_files.Count > 0)
+        {
+            <p class="lede">
+                @foreach (var file in _files)
+                {
+                    <span class="sep">·</span>
+                    <a href="@($"report/{Uri.EscapeDataString(file.Name)}")" download="@(file.Extension == ".html" ? null : file.Name)" target="@(file.Extension == ".html" ? "_blank" : null)" rel="noopener">@Label(file)</a>
+                }
+            </p>
+        }
+    </section>
     <section class="empty">
         <h2>No report yet</h2>
         <p>The report is written after each scan. Start one from the <a href="">overview</a>.</p>
@@ -29,7 +27,17 @@
 }
 else
 {
-    <iframe class="report-frame" title="Photo report" src="@($"report/{Uri.EscapeDataString(_html.Name)}?v={_rendered.ToUnixTimeSeconds()}")"></iframe>
+    <div class="report-page">
+        <div class="report-toolbar">
+            <span class="caption">Rendered @Fmt.Ago(_rendered)</span>
+            @foreach (var file in _files)
+            {
+                <span class="sep">·</span>
+                <a href="@($"report/{Uri.EscapeDataString(file.Name)}")" download="@(file.Extension == ".html" ? null : file.Name)" target="@(file.Extension == ".html" ? "_blank" : null)" rel="noopener">@Label(file)</a>
+            }
+        </div>
+        <iframe class="report-frame" title="Photo report" src="@($"report/{Uri.EscapeDataString(_html.Name)}?v={_rendered.ToUnixTimeSeconds()}")"></iframe>
+    </div>
 }
 
 @code {
