@@ -31,11 +31,11 @@ internal sealed partial class HtmlReportDocument
         Kpi("Bodies", _bodies.Count > 0 ? Fmt.Int(_bodies.Count) : "–", topBody is null ? null : "mostly " + topBody.Display, false);
         Kpi("Median aperture", _sig.MedianFNumber is { } f ? Fmt.FNum(f) : "–",
             _sig.SampleCount > 0 ? Fmt.Pct(_sig.ApertureCeilingShare) + " at the lens limit" : null, false);
-        var (focal, focalSub) = MostUsedFocal();
-        Kpi("Most-used focal", focal, focalSub, false);
+        var focal = FocalSummary.Dominant(_p);
+        Kpi(FocalSummary.MedianLabel, FocalSummary.Median(_p), focal.Caption, false);
         var (genre, genreSub) = TopGenre();
         Kpi("Top subject", genre, genreSub, genre != "–");
-        _sb.Append("</dl>");
+        _sb.Append("</dl><p class=\"note focal-explanation\">").AppendEsc(FocalSummary.Explanation).Append("</p>");
         Insights(ReportSections.Overview);
         _sb.Append("</section>\n");
     }
@@ -63,25 +63,6 @@ internal sealed partial class HtmlReportDocument
         return _lib.FilesSeen > 0 ? Plural(_lib.FilesSeen, "file seen", "files seen") : null;
     }
 
-    private (string Value, string? Sub) MostUsedFocal()
-    {
-        var median = _sig.MedianFocal35 is { } m ? "35 mm-eq · median " + Fmt.Focal(m) : "35 mm-equivalent";
-        var peak = (_p.FocalPeaks ?? []).Where(p => p is not null && double.IsFinite(p.Focal35Mm) && p.Focal35Mm > 0)
-            .OrderByDescending(p => p.Share).ThenBy(p => p.Focal35Mm).FirstOrDefault();
-        if (peak is not null)
-        {
-            return (Fmt.Focal(peak.Focal35Mm), median);
-        }
-
-        if (_dist.TryGetValue(DistributionIds.Focal35, out var d) && Charts.HasData(d))
-        {
-            var best = d.Bins.OrderByDescending(b => b.Count).First();
-            return (Charts.FocalBinLabel(best), median);
-        }
-
-        return _sig.MedianFocal35 is { } med ? (Fmt.Focal(med), "35 mm-eq median") : ("–", null);
-    }
-
     private (string Value, string? Sub) TopGenre()
     {
         if (!_dist.TryGetValue(DistributionIds.Genre, out var d) || !Charts.HasData(d))
@@ -102,10 +83,14 @@ internal sealed partial class HtmlReportDocument
         }
 
         var parts = new List<string>();
-        var (focal, _) = MostUsedFocal();
-        if (focal != "–")
+        var (focal, _) = FocalSummary.Dominant(_p);
+        if (focal is not null)
         {
-            parts.Add("most often at " + focal);
+            parts.Add("most often around " + focal);
+        }
+        else if (FocalSummary.Median(_p) is { } median && median != "–")
+        {
+            parts.Add("with a median focal length of " + median);
         }
 
         if (_sig.MedianFNumber is { } f)

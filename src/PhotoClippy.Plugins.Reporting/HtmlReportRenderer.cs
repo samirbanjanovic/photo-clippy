@@ -9,7 +9,7 @@ public sealed class HtmlReportRenderer : IReportRenderer
     public const string PluginId = "builtin.report.html";
     public const string PluginVersion = "1.0.0";
 
-    private const string LayoutRevision = "html-layout-1";
+    private const string LayoutRevision = "html-layout-2";
 
     private readonly HtmlReportSettings _settings;
     private readonly string? _defaultFontsDirectory;

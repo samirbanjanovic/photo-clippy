@@ -91,6 +91,48 @@ public sealed partial class HtmlReportTests
     }
 
     [Fact]
+    public void Focal_kpi_shows_the_median_and_labels_the_dominant_peak_separately()
+    {
+        var model = ReportFixture.Empty();
+        model = model with
+        {
+            Profile = model.Profile with
+            {
+                Signals = new ShootingSignals { MedianFocal35 = 49.5 },
+                FocalPeaks = [new(24, 0.27, 22, 26)],
+            },
+        };
+
+        var html = new HtmlReportRenderer().RenderToString(model);
+
+        Assert.Contains("<dt>Median focal length</dt><dd>49.5 mm</dd>", html, StringComparison.Ordinal);
+        Assert.Contains("<dd class=\"sub\">Dominant focal peak: 24 mm (27% of focal-length samples)</dd>", html, StringComparison.Ordinal);
+        Assert.Contains(FocalSummary.Explanation, html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<dt>Most-used focal</dt>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_median_without_peak_data_is_not_called_most_used_in_the_headline()
+    {
+        var model = ReportFixture.Empty();
+        model = model with
+        {
+            Profile = model.Profile with
+            {
+                Library = model.Profile.Library with { CapturesInScope = 10 },
+                Signals = new ShootingSignals { MedianFocal35 = 49.5 },
+            },
+            Insights = [],
+        };
+
+        var html = new HtmlReportRenderer().RenderToString(model);
+
+        Assert.Contains("with a median focal length of 49.5 mm", html, StringComparison.Ordinal);
+        Assert.Contains("Dominant focal peak: unavailable", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("most often around 49.5 mm", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Raw_analyzer_signals_are_collapsed_with_readable_titles()
     {
         var html = new HtmlReportRenderer().RenderToString(ReportFixture.Full);

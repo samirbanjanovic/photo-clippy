@@ -121,6 +121,12 @@ dotnet run --project tools/PhotoClippy.SampleGen -- /tmp/samplelib --count 600 -
 photo-clippy run /tmp/samplelib -c "24/1.4, 35/1.2" --open
 ```
 
+The web Overview and HTML report show the same focal-length summary in 35 mm-equivalent
+terms: the **median** is the midpoint, while the **dominant focal peak** is the busiest cluster
+of focal lengths. A 49.5 mm median and a 24 mm peak can both be correct; the peak's share need
+not exceed 50%. If peak data is unavailable, the summary identifies the busiest histogram
+range instead, or explicitly says the peak is unavailable.
+
 ## Commands
 
 | command | purpose |
@@ -520,6 +526,11 @@ deploy/publish-image.sh --dry-run                      # print the commands only
 deploy/publish-image.sh --no-push                      # build and smoke test locally as photo-clippy:<tag>
 deploy/publish-image.sh -p linux/arm64                 # for an ARM server
 ```
+
+The Docker build restores from project files before copying source code to keep the restore
+layer cached. When adding a referenced project, add its project-file `COPY` to
+[deploy/Dockerfile](deploy/Dockerfile) before `dotnet restore`; otherwise `dotnet publish
+--no-restore` fails with `NETSDK1004` for that project's missing assets file.
 
 | tag | meaning |
 | :--- | :--- |

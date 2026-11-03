@@ -1,5 +1,6 @@
 @page "/"
 @inherits LiveComponent
+@using PhotoClippy.Plugins.Reporting
 @inject AppRuntime Runtime
 @inject ScanScheduler Scheduler
 @inject IHostApplicationLifetime Lifetime
@@ -122,14 +123,20 @@ else
     var p = _snapshot.Profile;
     var lib = p.Library;
     var s = p.Signals;
+    var focal = FocalSummary.Dominant(p);
     <section class="kpis">
         <div class="kpi"><span class="kpi-value">@Fmt.N(lib.CapturesInScope)</span><span class="kpi-label">photos analysed</span></div>
         <div class="kpi"><span class="kpi-value">@p.Bodies.Count</span><span class="kpi-label">@(p.Bodies.Count == 1 ? "camera" : "cameras")</span></div>
         <div class="kpi"><span class="kpi-value">@p.Lenses.Count</span><span class="kpi-label">@(p.Lenses.Count == 1 ? "lens" : "lenses")</span></div>
-        <div class="kpi"><span class="kpi-value">@Fmt.Focal(s.MedianFocal35)</span><span class="kpi-label">median focal (35mm eq.)</span></div>
+        <div class="kpi">
+            <span class="kpi-value">@FocalSummary.Median(p)</span>
+            <span class="kpi-label">@FocalSummary.MedianLabel</span>
+            <span class="caption">@focal.Caption</span>
+        </div>
         <div class="kpi"><span class="kpi-value">@Fmt.Aperture(s.MedianFNumber)</span><span class="kpi-label">median aperture</span></div>
         <div class="kpi"><span class="kpi-value">@Fmt.Iso(s.MedianIso)</span><span class="kpi-label">median ISO</span></div>
     </section>
+    <p class="caption">@FocalSummary.Explanation</p>
     <p class="caption range">@Fmt.Date(lib.FirstCapture) – @Fmt.Date(lib.LastCapture) · @Fmt.N(lib.FilesSeen) files seen · @Fmt.Bytes(lib.TotalBytes)</p>
 
     <section class="grid">

@@ -55,7 +55,7 @@ main{padding-bottom:72px}
 .kpi dt{font-size:12px;color:var(--muted);letter-spacing:.03em}
 .kpi dd{margin:8px 0 0;font-size:40px;line-height:1.08;font-weight:300;letter-spacing:-.025em;overflow-wrap:anywhere}
 .kpi dd.word{font-size:28px;line-height:1.2;padding-top:8px}
-.kpis+.insights{margin:48px 0 0}
+.kpis+.insights,.focal-explanation+.insights{margin:48px 0 0}
 .ovx{overflow-x:auto}
 .big{display:block;font-size:40px;line-height:1.1;font-weight:300;letter-spacing:-.02em;margin-top:18px}
 .big.acc{color:var(--accent)}

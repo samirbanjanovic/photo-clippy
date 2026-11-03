@@ -13,6 +13,7 @@ COPY src/PhotoClippy.Contracts/*.csproj src/PhotoClippy.Contracts/
 COPY src/PhotoClippy.Core/*.csproj src/PhotoClippy.Core/
 COPY src/PhotoClippy.Imaging/*.csproj src/PhotoClippy.Imaging/
 COPY src/PhotoClippy.Plugins.Auth/*.csproj src/PhotoClippy.Plugins.Auth/
+COPY src/PhotoClippy.Plugins.BehavioralFocal/*.csproj src/PhotoClippy.Plugins.BehavioralFocal/
 COPY src/PhotoClippy.Plugins.Clip/*.csproj src/PhotoClippy.Plugins.Clip/
 COPY src/PhotoClippy.Plugins.Color/*.csproj src/PhotoClippy.Plugins.Color/
 COPY src/PhotoClippy.Plugins.Composition/*.csproj src/PhotoClippy.Plugins.Composition/
