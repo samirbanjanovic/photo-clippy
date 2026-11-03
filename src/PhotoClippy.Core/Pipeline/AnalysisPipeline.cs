@@ -438,7 +438,9 @@ public sealed class AnalysisPipeline(AppOptions options, PipelineServices servic
                     continue;
                 }
 
-                if (slotById.TryGetValue(row.PluginId, out var slot) && row.CacheKey == slot.CacheKey && Deserialize(slot, row.Json) is { } features)
+                if (slotById.TryGetValue(row.PluginId, out var slot) &&
+                    row.CacheKey == CacheKeyFor(slot, captures[i].Facts, file.Path) &&
+                    Deserialize(slot, row.Json) is { } features)
                 {
                     parts.Add((slot, features));
                 }
@@ -667,7 +669,7 @@ public sealed class AnalysisPipeline(AppOptions options, PipelineServices servic
                     var json = features is CompositionFeatures c
                         ? JsonSerializer.Serialize(c, ContractJson.Options)
                         : JsonSerializer.Serialize((ColorFeatures)features, ContractJson.Options);
-                    rows.Add(new FeatureRow(file.Path, slot.Id, slot.CacheKey, file.Size, AnalysisStore.Ticks(file), json));
+                    rows.Add(new FeatureRow(file.Path, slot.Id, CacheKeyFor(slot, context), file.Size, AnalysisStore.Ticks(file), json));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -678,5 +680,19 @@ public sealed class AnalysisPipeline(AppOptions options, PipelineServices servic
         }
 
         return new WorkResult(item.Index, parts, rows, FrameDecodeStatus.Ok);
+    }
+
+    private static string CacheKeyFor(AnalyzerSlot slot, CaptureFacts facts, string sourcePath) =>
+        CacheKeyFor(slot, new AnalysisContext { CaptureId = facts.CaptureId, SourcePath = sourcePath, Facts = facts });
+
+    private static string CacheKeyFor(AnalyzerSlot slot, AnalysisContext context)
+    {
+        var analyzer = (IPlugin?)slot.Composition ?? slot.Color;
+        if (analyzer is not IContextFingerprintProvider fingerprintProvider)
+        {
+            return slot.CacheKey;
+        }
+
+        return $"{slot.CacheKey}#{fingerprintProvider.GetContextFingerprint(context)}";
     }
 }

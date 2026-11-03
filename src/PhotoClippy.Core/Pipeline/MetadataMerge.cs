@@ -18,6 +18,16 @@ public static class MetadataMerge
             extras[k] = v;
         }
 
+        var cropProvenance = primary.CropProvenance ?? secondary.CropProvenance;
+        if (primary.CropProvenance is { } primaryCrop && secondary.CropProvenance is { } secondaryCrop && primaryCrop != secondaryCrop)
+        {
+            cropProvenance = primaryCrop with
+            {
+                Status = CropEvidenceStatus.Ambiguous,
+                ExclusionReason = "conflicting-crop-provenance",
+            };
+        }
+
         return primary with
         {
             Extractor = primary.Extractor is null ? secondary.Extractor : secondary.Extractor is null ? primary.Extractor : $"{primary.Extractor}+{secondary.Extractor}",
@@ -46,6 +56,7 @@ public static class MetadataMerge
             Width = primary.Width ?? secondary.Width,
             Height = primary.Height ?? secondary.Height,
             Orientation = primary.Orientation ?? secondary.Orientation,
+            CropProvenance = cropProvenance,
             FocalPlaneXResolutionPerMm = primary.FocalPlaneXResolutionPerMm ?? secondary.FocalPlaneXResolutionPerMm,
             SubjectDistanceM = primary.SubjectDistanceM ?? secondary.SubjectDistanceM,
             Rating = primary.Rating ?? secondary.Rating,

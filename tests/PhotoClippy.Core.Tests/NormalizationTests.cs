@@ -296,13 +296,51 @@ public sealed class CaptureBuilderTests
     public void Edited_exports_of_the_same_instant_merge()
     {
         var original = Facts(TestData.NikonMeta("/lib/DSC_0001.jpg", T0));
-        var export = Facts(TestData.NikonMeta("/exports/final.jpg", T0) with { Software = "Adobe Photoshop Lightroom Classic" });
+        var provenance = new CropProvenance
+        {
+            Status = CropEvidenceStatus.Verified,
+            Source = CropEvidenceSource.ExternalMetadataPlugin,
+            OriginalCaptureId = "original-1",
+            FinalCaptureId = "final-1",
+            IndependentSessionId = "session-1",
+        };
+        var export = Facts(TestData.NikonMeta("/exports/final.jpg", T0) with
+        {
+            Software = "Adobe Photoshop Lightroom Classic",
+            CropProvenance = provenance,
+        });
 
         var set = CaptureBuilder.Build([original, export]);
 
         var capture = Assert.Single(set.Captures);
         Assert.Equal(1, set.MergedExports);
         Assert.Equal("/lib/DSC_0001.jpg", capture.Facts.PrimaryPath);
+        Assert.Equal(provenance, Assert.Single(capture.Facts.CropProvenanceRecords));
+    }
+
+    [Fact]
+    public void Conflicting_crop_provenance_from_extractors_is_ambiguous()
+    {
+        var first = new CropProvenance { Status = CropEvidenceStatus.Verified, OriginalCaptureId = "original-a" };
+        var second = new CropProvenance { Status = CropEvidenceStatus.Verified, OriginalCaptureId = "original-b" };
+
+        var merged = PhotoClippy.Core.Pipeline.MetadataMerge.Merge(
+            new PhotoMetadata { Path = "/lib/a.jpg", CropProvenance = first },
+            new PhotoMetadata { Path = "/lib/a.jpg", CropProvenance = second });
+
+        Assert.Equal(CropEvidenceStatus.Ambiguous, merged.CropProvenance?.Status);
+        Assert.Equal("conflicting-crop-provenance", merged.CropProvenance?.ExclusionReason);
+    }
+
+    [Fact]
+    public void Old_capture_contract_json_defaults_crop_provenance_to_empty()
+    {
+        var facts = System.Text.Json.JsonSerializer.Deserialize<CaptureFacts>(
+            """{"CaptureId":"capture-1","PrimaryPath":"capture.jpg"}""",
+            ContractJson.Options);
+
+        Assert.NotNull(facts);
+        Assert.Empty(facts.CropProvenanceRecords);
     }
 
     [Fact]

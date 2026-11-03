@@ -15,6 +15,7 @@
     <ProjectReference Include="../PhotoClippy.Testing/PhotoClippy.Testing.csproj" />
     <ProjectReference Include="../../src/PhotoClippy.Contracts/PhotoClippy.Contracts.csproj" />
     <ProjectReference Include="../../src/PhotoClippy.Plugins.Composition/PhotoClippy.Plugins.Composition.csproj" />
+    <ProjectReference Include="../../src/PhotoClippy.Plugins.BehavioralFocal/PhotoClippy.Plugins.BehavioralFocal.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -25,6 +25,7 @@ internal sealed class AppRuntime : IDisposable
     [
         "PhotoClippy.Plugins.Metadata",
         "PhotoClippy.Plugins.Composition",
+        "PhotoClippy.Plugins.BehavioralFocal",
         "PhotoClippy.Plugins.Clip",
         "PhotoClippy.Plugins.Color",
         "PhotoClippy.Plugins.Recommendation",
