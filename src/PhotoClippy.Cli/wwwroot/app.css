@@ -201,7 +201,14 @@ input:disabled, select:disabled, textarea:disabled { opacity: .55; }
 .next-steps span { color: var(--muted); font-size: .88rem; }
 
 /* Report */
-.report-frame { width: 100%; height: calc(100vh - 13rem); min-height: 640px; border: 1px solid var(--hair); border-radius: var(--radius); background: var(--surface); }
+.shell:has(.report-page) { max-width: none; height: 100vh; height: 100dvh; min-height: 0; padding: 0; overflow: hidden; }
+.shell:has(.report-page) .masthead { flex: 0 0 auto; padding-inline: clamp(1rem, 4vw, 2.5rem); }
+.shell:has(.report-page) main { display: flex; flex: 1 1 0; min-height: 0; padding: 0; }
+.shell:has(.report-page) .colophon { display: none; }
+.report-page { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; }
+.report-toolbar { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: .3rem; padding: .45rem clamp(1rem, 4vw, 2.5rem); border-bottom: 1px solid var(--hair); }
+.report-toolbar .caption { margin: 0; }
+.report-frame { width: 100%; height: auto; min-height: 0; flex: 1 1 0; border: 0; border-radius: 0; background: var(--surface); }
 
 /* Chips and badges */
 .chips { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .85rem; align-items: center; }
