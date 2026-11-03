@@ -135,7 +135,7 @@ Params:
 
 | field             | type          | description |
 |-------------------|---------------|-------------|
-| `contractVersion` | string        | host contract version, currently `"1.2"`. Refuse (error) if the major is unknown to you. |
+| `contractVersion` | string        | host contract version, currently `"1.3"`. Refuse (error) if the major is unknown to you. |
 | `kind`            | string        | the kind the host configured this plugin as. |
 | `pluginId`        | string        | the configured plugin id. |
 | `settings`        | object        | the plugin's `settings` object from the host config (`{}` if none). Validate it; reply `-32602` on bad settings. |
@@ -192,7 +192,35 @@ a `path` are matched by position). PhotoMetadata fields (all optional except `pa
 `exposureProgram`, `meteringMode`, `whiteBalance`, `flashFired`, `captureLocal` (local time, no
 offset), `offsetTime`, `subSec`, `imageUniqueId`, `width`, `height`, `orientation`,
 `focalPlaneXResolutionPerMm`, `subjectDistanceM`, `rating`, `hasGps`, `latitude`, `longitude`,
-`warnings` (string[]), `extras` (object of string → string).
+`cropProvenance` (optional; see below), `warnings` (string[]), `extras` (object of string → string).
+
+`cropProvenance` is an additive optional object. Legacy metadata responses may omit it. It is
+descriptive evidence, not a crop detector or proof supplied by the host. A metadata plugin may
+use `status: "verified"` and `source: "externalMetadataPlugin"` only when it has a trustworthy
+original/final link and transform; the host checks geometry and identities but cannot independently
+attest the plugin's source. Otherwise use `unsupported`, `ambiguous`, or `invalid`, or omit the field.
+
+| field | type | description |
+|---|---|---|
+| `status` | enum string | `unknown`, `verified`, `unsupported`, `ambiguous`, `invalid` |
+| `source` | enum string | `unknown`, `externalMetadataPlugin` |
+| `originalCaptureId`, `finalCaptureId`, `independentSessionId` | string? | Opaque stable identifiers; never file paths, names, or GPS |
+| `originalWidth`, `originalHeight`, `originalOrientation` | number? | Encoded original dimensions and EXIF orientation 1..8 |
+| `finalWidth`, `finalHeight`, `finalOrientation` | number? | Encoded final dimensions and EXIF orientation 1..8 |
+| `left`, `top`, `right`, `bottom` | number? | Normalized 0..1 crop bounds in displayed, orientation-corrected original coordinates |
+| `focalEquivalentIncludesCrop` | bool? | Whether the supplied focal-equivalent value already includes this crop |
+| `exclusionReason` | string? | Bounded reason code for unsupported/ambiguous/invalid evidence |
+
+The host does not currently have a built-in crop-provenance producer, original/export linker, or
+sidecar invalidation source. Geometry summaries are available only when an explicitly selected
+plugin supplies a complete record. Missing or unsupported evidence is omitted, never inferred
+from resize dimensions, editor tags, or software labels.
+
+For a `verified` record, the host requires distinct opaque capture IDs, an independent session ID,
+positive encoded dimensions, EXIF orientations 1..8, finite normalized bounds with positive width
+and height, and an explicit `focalEquivalentIncludesCrop` value. The displayed crop aspect must
+match the displayed final-image aspect within 2%; otherwise the evidence is excluded. This validates
+internal geometry, not whether an external source's original/export link is truthful.
 
 Host guarantees: the host always ends up with exactly one result per input. Missing results become
 an empty PhotoMetadata with a warning; if the request fails with a JSON-RPC error every file gets

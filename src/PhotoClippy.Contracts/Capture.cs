@@ -52,6 +52,8 @@ public sealed record CaptureFacts
 
     public int? Width { get; init; }
     public int? Height { get; init; }
+    /// <summary>Crop provenance records retained from the files associated with this capture.</summary>
+    public IReadOnlyList<CropProvenance> CropProvenanceRecords { get; init; } = [];
     public int? Rating { get; init; }
     public bool HasGps { get; init; }
     public string? Software { get; init; }

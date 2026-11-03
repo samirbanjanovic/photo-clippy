@@ -6,7 +6,7 @@ namespace PhotoClippy.Contracts;
 public static class ContractInfo
 {
     /// <summary>Semantic version of the plugin contract. Minor bumps are additive; major bumps break.</summary>
-    public const string Version = "1.2";
+    public const string Version = "1.3";
 }
 
 public enum ComponentKind

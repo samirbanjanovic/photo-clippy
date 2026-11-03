@@ -617,8 +617,11 @@ tools/PhotoClippy.SampleGen/           synthetic EXIF library generator
 
 ## Relative focal range: committee report and proposal
 
-**Status: design proposal for issue #3; awaiting human approval.** This section does not
-enable a feature, change lens rankings, or authorize creating implementation issues.
+**Status:** the descriptive-first scope was approved in [design proposal #4](https://github.com/samirbanjanovic/photo-clippy/pull/4)
+and implementation is tracked by [issue #5](https://github.com/samirbanjanovic/photo-clippy/issues/5).
+This initial implementation adds optional crop-provenance contracts and an opt-in geometry
+plugin. It does not enable behavioral lens ranking. Stages B, D and E remain incomplete pending
+a supported provenance source and consented original/export fixtures.
 
 ### Committee discussion and decision
 
@@ -725,14 +728,17 @@ The proposal uses existing plugin kinds rather than a parallel analysis applicat
    explicit HTML/web presentation and typed-summary serialization need implementation.
    Preserve existing MCDA ranking when the behavioral recommender is not selected.
 
-**Verified contract gaps:** `PhotoMetadata.SubjectDistanceM` exists, but `CaptureFacts`
-does not carry it to analyzers. Neither normalized crop history nor detected subject boxes
-are currently available. `CompositionFeatures.SubjectArea` is salient occupancy, not a
-detector bounding box. CLIP supplies genre classification, not localization or distance.
-`CaptureSample` has no behavioral evidence today, and report renderers receive aggregated
-`ReportModel`, not raw frames. These are implementation dependencies, not existing abilities.
-Extend contracts additively, update contract version/protocol documentation and tolerate
-absent fields in old snapshots, caches and external plugins.
+**Current implementation and gaps:** optional, versioned crop-provenance records now flow from
+`PhotoMetadata` through capture merging, and conflicts become ambiguous. The opt-in
+`builtin.composition.behavioral-focal` plugin validates geometry, computes same-viewpoint framing
+and pixel retention, and does not infer a subject or lens preference. It accepts only records
+provided by an external metadata plugin; the built-in metadata extractor does not currently
+produce crop provenance. `PhotoMetadata.SubjectDistanceM` still does not reach analyzers, and
+there are no subject-box records. `CompositionFeatures.SubjectArea` remains salient occupancy,
+not a detector bounding box. No sampling, session-weighted aggregate summary, or typed behavioral
+report section is implemented. Numeric plugin extras remain experimental marginal distributions,
+not independent-session evidence. New contract fields are optional and legacy snapshots and
+external plugins may omit them.
 
 Required inputs depend on the claim: reliable focal/sensor normalization for equivalent
 framing; original/export linkage, crop coordinates and orientation for crop analysis;
@@ -858,68 +864,41 @@ macro, anamorphic or stitched images; intentional negative space; and inaccessib
 Expose provenance, exclusions and uncertainty, keep unknowns unknown, and abstain rather
 than converting these risks into false precision.
 
-### Proposed implementation plan and GitHub issue draft
+### Implementation status
 
-**Draft parent title:** Relative focal range: opt-in behavioral framing analysis plugin
+The implementation tracked by [issue #5](https://github.com/samirbanjanovic/photo-clippy/issues/5)
+is intentionally descriptive-first. Existing MCDA recommendations are unchanged; no behavioral
+ranking, model, detector, upload, or automatic download is enabled.
 
-**Problem:** Mounted-lens statistics do not explain whether repeated positioning and crop
-choices match the photographer's intended framing. Existing metadata/composition statistics
-lack the provenance needed to distinguish intent from constraints.
+| Stage | Status |
+|---|---|
+| A — Evidence contracts | Additive, optional `CropProvenance` contract (contract 1.3), with typed status/source, opaque capture/session IDs, dimensions, orientations, crop bounds and explicit focal-crop accounting. Old JSON snapshots default to no records. |
+| B — Preserve and normalize evidence | Supplied records survive metadata normalization and capture merging; conflicting records become ambiguous. No built-in source parser/linker exists, and sidecar changes are not yet tracked as metadata-cache dependencies. |
+| C — Composition plugin | `builtin.composition.behavioral-focal` is available but unselected by default. It validates bounds, identities, dimensions, orientation/aspect consistency, computes same-aspect final-equivalent framing and pixel retention, emits axis-specific values for unequal crops, and includes provenance-sensitive feature-cache fingerprints. |
+| D — Sessions and summary | Not implemented: there is no burst/session-weighted typed summary, stratum coverage, sampling, or report denominator. |
+| E — Reports and privacy | Numeric extras use existing profile/report output when the plugin is selected; typed coverage/exclusion summaries and feature-specific deletion are not implemented. Remove the plugin from `plugins.composition` to opt out. `photo-clippy cache clear` deletes cached metadata, features and snapshots, but clears the whole analysis cache rather than only this feature. |
+| F/G — Detection and ranking | Deferred. Subject detection and preference/purchase ranking remain gated on separate validation and approval. |
 
-**User value:** Explain repeatable framing/cropping habits, their resolution cost and
-conditional lens-trial opportunities without inventing a hidden photographic identity.
+Use the plugin only with a metadata extractor that can supply independently verified original,
+final and session identities plus a complete transform. For example, append
+`"builtin.composition.behavioral-focal"` to the `plugins.composition` list. The built-in metadata
+extractor does not currently populate this field, and the host cannot independently validate
+an external extractor's source claims. Missing evidence is omitted rather than inferred from
+smaller dimensions, editor tags or software labels.
 
-**Technical approach:** Ship an optional composition/recommender plugin in stages using
-the pipeline and additive evidence contracts described above. Start with verified crop
-geometry and descriptive evidence; gate CV and ranking on validation.
+**Remaining product decision/blocker:** select and document a source format that provides
+trustworthy original-to-final links, crop bounds and source/final dimensions, and supply consented
+fixtures for verifying those links and sidecar-change invalidation. The current pipeline cannot
+recover this from resize dimensions, software tags or capture timestamps without guessing. Until
+that decision and validation are available, numeric plugin marginals are not calibrated behavioral
+evidence. The geometry tests use synthetic records and establish arithmetic only, not behavioral
+accuracy. The plugin abstains unless an explicitly selected external metadata plugin supplies
+complete evidence. Disable it by removing the plugin from `plugins.composition`.
+`photo-clippy cache clear` deletes cached metadata, features and snapshots (including any stored
+evidence), but currently clears the whole analysis cache rather than only this feature.
 
-**Acceptance criteria:**
-
-- [ ] Disabled/unselected behavior, existing MCDA scores and old snapshots remain unchanged.
-- [ ] Public plugin factories load through existing discovery/configuration, pass health
-  checks, honor cancellation, are deterministic/thread-safe and invalidate caches correctly.
-- [ ] Geometry tests cover 24→50mm (48% linear / 23.04% area), sensor normalization,
-  aspect/orientation changes, crop offsets, invalid inputs and already-cropped digital zoom.
-- [ ] Unknown distances/crops never become zero measurements or confident recommendations;
-  saliency is not relabeled as a detected subject.
-- [ ] Capture merging, bursts, session boundaries, sampling, genre/gear confounding,
-  exclusions and absent evidence have focused tests and visible denominators.
-- [ ] JSON/CSV and HTML/web show provenance/coverage and honest abstention; no default photo
-  uploads, image embedding or identity recognition; opt-out/deletion are verified.
-- [ ] Ranking is opt-in, respects target compatibility and confirmed ownership, and remains
-  disabled until prospective validation beats both baselines under preregistered criteria.
-
-**Risks:** Non-identifiable intent, biased samples, incorrect crop/distance evidence,
-detector errors and overconfident purchase advice; mitigations are specified above.
-
-**Dependencies:** Human scope approval; consented original/export fixtures; crop-source
-support decision; additive contract/protocol/cache changes; confirmed-gear input; optional
-licensed local model evaluation; and participants for prospective validation. No new model,
-package dependency or automatic download is authorized by this report.
-
-**Proposed child drafts and dependency roadmap (not created):**
-
-| Order | Child issue draft | Depends on / completion gate |
-|---|---|---|
-| A | Specify crop/distance provenance and additive behavioral evidence contracts | Parent approval; source fixtures and backward-compatibility tests |
-| B | Preserve original/export transforms and normalize evidence | A; orientation, merge, sidecar invalidation and missingness tests |
-| C | Implement optional behavioral composition plugin and descriptive crop metrics | B; plugin hosting, geometry, cache and concurrency tests; no ranking |
-| D | Add independent-session sampling, confidence and typed summary plumbing | B/C; duplicate, stratum, bootstrap and abstention tests |
-| E | Present framing habits in reports/web with opt-out and deletion | C/D; serialization, coverage, wording and privacy checks |
-| F | Evaluate optional local subject detection with manual correction | C; licensed model benchmark and domain-bias review; not a crop-only MVP blocker |
-| G | Run prospective validation and gate behavioral recommender ranking | D/E; F only for claims using detection; preregistered baseline comparison |
-
-After each approved code milestone, run the affected existing xUnit projects first, then
-the documented build and serial full-suite commands in Development. Manually compare CLI
-and web outputs with the plugin disabled/enabled, missing evidence and missing models.
-Use source-linked synthetic geometry fixtures plus consented images; do not infer real
-behavioral accuracy from the existing synthetic EXIF sample library.
-
-**Approval checkpoint:** Review this report and approve or revise the descriptive-first
-scope and validation gates. Only after explicit approval should the parent and child issues
-be created, linked through GitHub parent/sub-issue relationships, and assigned roadmap
-milestones. The table above is a proposed roadmap, not a claim that issues or implementation
-already exist. Issue #3 should remain open pending the agreed approval/completion decision.
+Stages F (subject detection) and G (prospective validation/ranking) remain deferred. No model,
+dependency, automatic download, face recognition, image upload or behavioral ranking was added.
 
 ## About the mascot
 

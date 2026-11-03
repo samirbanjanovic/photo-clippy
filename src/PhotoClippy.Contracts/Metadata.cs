@@ -70,6 +70,8 @@ public sealed record PhotoMetadata
     public int? Height { get; init; }
     /// <summary>EXIF orientation 1..8.</summary>
     public int? Orientation { get; init; }
+    /// <summary>Optional explicit original-to-final crop provenance supplied by a metadata extractor.</summary>
+    public CropProvenance? CropProvenance { get; init; }
 
     /// <summary>Focal plane X resolution in pixels per mm; used to estimate sensor size.</summary>
     public double? FocalPlaneXResolutionPerMm { get; init; }

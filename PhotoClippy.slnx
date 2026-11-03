@@ -23,6 +23,7 @@
     <Project Path="src/PhotoClippy.Core/PhotoClippy.Core.csproj" />
     <Project Path="src/PhotoClippy.Imaging/PhotoClippy.Imaging.csproj" />
     <Project Path="src/PhotoClippy.Plugins.Auth/PhotoClippy.Plugins.Auth.csproj" />
+    <Project Path="src/PhotoClippy.Plugins.BehavioralFocal/PhotoClippy.Plugins.BehavioralFocal.csproj" />
     <Project Path="src/PhotoClippy.Plugins.Clip/PhotoClippy.Plugins.Clip.csproj" />
     <Project Path="src/PhotoClippy.Plugins.Color/PhotoClippy.Plugins.Color.csproj" />
     <Project Path="src/PhotoClippy.Plugins.Composition/PhotoClippy.Plugins.Composition.csproj" />

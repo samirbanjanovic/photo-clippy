@@ -45,6 +45,12 @@ public sealed record AnalysisContext
     public CaptureFacts? Facts { get; init; }
 }
 
+/// <summary>Optional cache input fingerprint for analyzers whose output depends on capture facts.</summary>
+public interface IContextFingerprintProvider
+{
+    string GetContextFingerprint(AnalysisContext context);
+}
+
 /// <summary>
 /// Composition component output. All fields are optional: several analyzers are merged
 /// (scalars: first non-null by priority; genres: weighted fusion; extras: union).

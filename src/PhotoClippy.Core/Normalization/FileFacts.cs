@@ -35,6 +35,7 @@ public sealed record FileFacts
     public int? Width { get; init; }
     public int? Height { get; init; }
     public int? Orientation { get; init; }
+    public CropProvenance? CropProvenance { get; init; }
     public double? FocalPlaneXResolutionPerMm { get; init; }
     public int? Rating { get; init; }
     public bool HasGps { get; init; }

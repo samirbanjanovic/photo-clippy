@@ -82,6 +82,7 @@ public static partial class CaptureBuilder
             Width = width,
             Height = height,
             Orientation = metadata.Orientation,
+            CropProvenance = metadata.CropProvenance,
             FocalPlaneXResolutionPerMm = Positive(metadata.FocalPlaneXResolutionPerMm),
             Rating = metadata.Rating,
             HasGps = metadata.HasGps,
@@ -411,6 +412,7 @@ public static partial class CaptureBuilder
 
         var paths = group.Select(f => f.File.Path).ToArray();
         var candidates = group.Select(f => f.File).OrderBy(FramePriority).ThenBy(f => f.Path, StringComparer.Ordinal).ToArray();
+        var cropProvenance = group.Select(f => f.CropProvenance).OfType<CropProvenance>().Distinct().ToArray();
         var facts = new CaptureFacts
         {
             CaptureId = StableId(p.File.Path),
@@ -437,6 +439,7 @@ public static partial class CaptureBuilder
             ExposureProgram = Pick(f => f.ExposureProgram),
             Width = PickValue(f => f.Width),
             Height = PickValue(f => f.Height),
+            CropProvenanceRecords = cropProvenance,
             Rating = group.Max(f => f.Rating),
             HasGps = group.Any(f => f.HasGps),
             Software = Pick(f => f.Software),
